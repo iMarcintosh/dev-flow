@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { X, Loader2 } from 'lucide-react'
+import { X, Loader2, AlertCircle } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent, CustomAgentCreate } from '@/types/custom-agent'
 import { AVAILABLE_TOOLS, DEFAULT_AGENT_ICON } from '@/types/custom-agent'
@@ -17,6 +17,7 @@ interface AgentModalProps {
 export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const isEdit = !!agent
   const [activeTab, setActiveTab] = useState<'config' | 'knowledge'>('config')
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     name: agent?.name || '',
@@ -39,6 +40,17 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     onSuccess: () => {
       onSave()
     },
+    onError: (error: any) => {
+      // Handle validation errors from backend
+      if (error.response?.status === 422 && error.response?.data?.detail) {
+        const validationErrors: Record<string, string> = {}
+        error.response.data.detail.forEach((err: any) => {
+          const field = err.loc[err.loc.length - 1]
+          validationErrors[field] = err.msg
+        })
+        setErrors(validationErrors)
+      }
+    },
   })
 
   const updateMutation = useMutation({
@@ -47,10 +59,50 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     onSuccess: () => {
       onSave()
     },
+    onError: (error: any) => {
+      // Handle validation errors from backend
+      if (error.response?.status === 422 && error.response?.data?.detail) {
+        const validationErrors: Record<string, string> = {}
+        error.response.data.detail.forEach((err: any) => {
+          const field = err.loc[err.loc.length - 1]
+          validationErrors[field] = err.msg
+        })
+        setErrors(validationErrors)
+      }
+    },
   })
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required'
+    }
+
+    if (!formData.system_prompt.trim()) {
+      newErrors.system_prompt = 'System prompt is required (min 10 characters)'
+    } else if (formData.system_prompt.trim().length < 10) {
+      newErrors.system_prompt = 'System prompt must be at least 10 characters'
+    }
+
+    if (!formData.model_name) {
+      newErrors.model_name = 'Please select a model'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Clear previous errors
+    setErrors({})
+
+    // Validate form
+    if (!validateForm()) {
+      return
+    }
 
     const data: CustomAgentCreate = {
       ...formData,
@@ -127,17 +179,50 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           {activeTab === 'config' ? (
             <>
+          {/* Error Summary */}
+          {Object.keys(errors).length > 0 && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
+                    Please fix the following errors:
+                  </h3>
+                  <ul className="mt-2 text-sm text-red-700 dark:text-red-400 list-disc list-inside space-y-1">
+                    {Object.entries(errors).map(([field, message]) => (
+                      <li key={field}>{message}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Name</label>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Name <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value })
+                  if (errors.name) setErrors({ ...errors, name: '' })
+                }}
                 required
-                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className={`w-full px-3 py-2 bg-background border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                  errors.name ? 'border-red-500' : 'border-border'
+                }`}
+                placeholder="e.g., Code Review Agent"
               />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.name}
+                </p>
+              )}
             </div>
 
             <div>
@@ -158,32 +243,58 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
+              placeholder="What does this agent do?"
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
 
           {/* Model Selection */}
-          <ModelSelector
-            value={formData.model_name}
-            onChange={(modelId) => setFormData({ ...formData, model_name: modelId })}
+          <div>
+            <ModelSelector
+              value={formData.model_name}
+              onChange={(modelId) => {
+                setFormData({ ...formData, model_name: modelId })
+                if (errors.model_name) setErrors({ ...errors, model_name: '' })
+              }}
             models={models || {}}
-            label="Model"
+            label="Model *"
             disabled={modelsLoading}
           />
+          {errors.model_name && (
+            <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              {errors.model_name}
+            </p>
+          )}
+          </div>
 
           {/* System Prompt */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              System Prompt
+              System Prompt <span className="text-red-500">*</span>
             </label>
             <textarea
               value={formData.system_prompt}
-              onChange={(e) => setFormData({ ...formData, system_prompt: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, system_prompt: e.target.value })
+                if (errors.system_prompt) setErrors({ ...errors, system_prompt: '' })
+              }}
               required
               rows={6}
               placeholder="You are a helpful assistant that..."
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono text-sm"
+              className={`w-full px-3 py-2 bg-background border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono text-sm ${
+                errors.system_prompt ? 'border-red-500' : 'border-border'
+              }`}
             />
+            {errors.system_prompt && (
+              <p className="mt-1 text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {errors.system_prompt}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Minimum 10 characters. This defines the agent's behavior and personality.
+            </p>
           </div>
 
           {/* Parameters */}
