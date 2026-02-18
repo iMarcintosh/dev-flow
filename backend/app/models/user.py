@@ -31,6 +31,12 @@ class User(Base):
     agent_runs = relationship("AgentRun", back_populates="user")
     chat_messages = relationship("ChatMessage", back_populates="user")
     
+    # Custom agent relationships
+    created_teams = relationship("Team", back_populates="creator", foreign_keys="Team.created_by")
+    team_memberships = relationship("TeamMember", back_populates="user")
+    custom_agents = relationship("CustomAgent", back_populates="user")
+    agent_conversations = relationship("AgentConversation", back_populates="user")
+    
     @property
     def anthropic_api_key(self) -> str | None:
         """Decrypt and return Anthropic API key."""
