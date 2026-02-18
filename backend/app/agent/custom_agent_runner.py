@@ -91,16 +91,16 @@ async def run_custom_agent(
                 # Use AgentExecutor for models that don't support bind_tools (e.g., Claude)
                 from langchain.agents import initialize_agent, AgentType
                 
-                # Create agent executor with ZERO_SHOT_REACT_DESCRIPTION strategy
+                # Create agent executor with STRUCTURED_CHAT for multi-input tools
                 agent_executor = initialize_agent(
                     tools=tools,
                     llm=llm,
-                    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                    agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
                     verbose=True,
                     handle_parsing_errors=True,
                     max_iterations=5,
                 )
-                logger.info(f"✅ Created agent executor with {len(tools)} tools")
+                logger.info(f"✅ Created STRUCTURED_CHAT agent with {len(tools)} tools")
         else:
             logger.warning("⚠️ No tools to bind!")
     
