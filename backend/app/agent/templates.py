@@ -36,7 +36,7 @@ Guidelines:
 - Use markdown formatting for clarity
 
 Focus on issues that truly matter - avoid nitpicking minor style preferences.""",
-        "model_name": "claude-3-5-sonnet-20241022",
+        "model_name": "claude-3-5-sonnet-20240620",
         "temperature": 0.3,
         "enabled_tools": ["board", "code_analysis"],
     },
@@ -79,7 +79,7 @@ Guidelines:
 - Consider performance testing where relevant
 
 Focus on tests that provide real value and catch real bugs.""",
-        "model_name": "claude-3-5-sonnet-20241022",
+        "model_name": "claude-3-5-sonnet-20240620",
         "temperature": 0.5,
         "enabled_tools": ["board", "code_execution"],
     },
@@ -122,7 +122,7 @@ For API docs, always include:
 - Error codes and handling
 
 Use Markdown formatting and create Mermaid diagrams when helpful.""",
-        "model_name": "claude-3-5-sonnet-20241022",
+        "model_name": "claude-3-5-sonnet-20240620",
         "temperature": 0.7,
         "enabled_tools": ["board", "web_search"],
     },
@@ -174,7 +174,7 @@ Common Bug Categories:
 - Async/await problems
 
 Be methodical, patient, and explain your reasoning at each step.""",
-        "model_name": "claude-3-5-sonnet-20241022",
+        "model_name": "claude-3-5-sonnet-20240620",
         "temperature": 0.4,
         "enabled_tools": ["board", "code_execution", "web_search"],
     },
@@ -224,7 +224,7 @@ Refactoring Principles:
 - **Backwards compatible**: Consider API stability
 
 Provide before/after code examples and explain the trade-offs of each suggestion.""",
-        "model_name": "claude-3-5-sonnet-20241022",
+        "model_name": "claude-3-5-sonnet-20240620",
         "temperature": 0.5,
         "enabled_tools": ["board", "code_analysis"],
     }

@@ -165,20 +165,24 @@ class AgentConversationResponse(AgentConversationBase):
 class AgentMessageBase(BaseModel):
     role: str = Field(..., pattern="^(user|assistant|system|tool)$")
     content: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class AgentMessageCreate(AgentMessageBase):
+class AgentMessageCreate(BaseModel):
     conversation_id: UUID
+    role: str
+    content: str
+    message_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentMessageResponse(AgentMessageBase):
     id: UUID
     conversation_id: UUID
+    message_metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 # Agent Template Schema

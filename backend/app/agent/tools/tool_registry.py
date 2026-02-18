@@ -219,7 +219,7 @@ def bind_tools_to_llm(
         project_id: Project ID (required for board tools)
     
     Returns:
-        LLM with tools bound
+        LLM with tools bound (or original LLM if no tools or binding not supported)
     """
     tools = []
     
@@ -236,8 +236,17 @@ def bind_tools_to_llm(
     if not tools:
         return llm
     
-    # Bind tools to LLM (LangChain native tool binding)
-    return llm.bind_tools(tools)
+    # Try to bind tools (not all LLMs support this)
+    try:
+        if hasattr(llm, 'bind_tools'):
+            return llm.bind_tools(tools)
+        else:
+            # For LLMs that don't support bind_tools, return as is
+            # Tools will need to be handled differently
+            return llm
+    except Exception:
+        # If binding fails, return original LLM
+        return llm
 
 
 def get_tool_descriptions() -> Dict[str, str]:
