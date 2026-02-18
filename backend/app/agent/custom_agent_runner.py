@@ -89,11 +89,18 @@ async def run_custom_agent(
                 logger.info(f"✅ Tools bound using bind_tools()")
             else:
                 # Use AgentExecutor for models that don't support bind_tools (e.g., Claude)
-                from langgraph.prebuilt import create_react_agent
+                from langchain.agents import initialize_agent, AgentType
                 
-                # Create ReAct agent executor
-                agent_executor = create_react_agent(llm, tools)
-                logger.info(f"✅ Created ReAct agent with {len(tools)} tools")
+                # Create agent executor with ZERO_SHOT_REACT_DESCRIPTION strategy
+                agent_executor = initialize_agent(
+                    tools=tools,
+                    llm=llm,
+                    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                    verbose=True,
+                    handle_parsing_errors=True,
+                    max_iterations=5,
+                )
+                logger.info(f"✅ Created agent executor with {len(tools)} tools")
         else:
             logger.warning("⚠️ No tools to bind!")
     
@@ -113,12 +120,12 @@ async def run_custom_agent(
     try:
         # Check if we're using AgentExecutor
         if agent_executor is not None:
-            # Use AgentExecutor
+            # Use AgentExecutor - it expects a single input string
             response_dict = await agent_executor.ainvoke({
-                "messages": messages
+                "input": input_text
             })
             # Extract final response
-            response_content = response_dict['messages'][-1].content if response_dict.get('messages') else ""
+            response_content = response_dict.get('output', '')
             success = True
         else:
             # Normal LLM invocation
