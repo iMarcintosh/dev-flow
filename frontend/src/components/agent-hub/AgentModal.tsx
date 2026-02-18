@@ -24,7 +24,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     icon: agent?.icon || DEFAULT_AGENT_ICON,
     visibility: agent?.visibility || ('private' as const),
     model_name: agent?.model_name || 'claude-3-haiku-20240307',
-    system_prompt: agent?.system_prompt || '',
+    system_prompt: agent?.system_prompt || 'You are a helpful AI assistant.',
     temperature: agent?.temperature ?? 0.7,
     max_tokens: agent?.max_tokens,
     top_p: agent?.top_p,
@@ -54,6 +54,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
 
     const data: CustomAgentCreate = {
       ...formData,
+      system_prompt: formData.system_prompt.trim() || 'You are a helpful AI assistant.',
       max_tokens: formData.max_tokens || undefined,
       top_p: formData.top_p || undefined,
     }
