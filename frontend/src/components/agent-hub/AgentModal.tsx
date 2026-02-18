@@ -104,6 +104,8 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
 
     // Validate form
     if (!validateForm()) {
+      // Show toast for validation errors
+      toast.error('Please fix the errors in the form', 'Check the highlighted fields above')
       return
     }
 
