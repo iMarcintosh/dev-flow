@@ -27,9 +27,24 @@ export function Select({
   className = '',
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const selectedOption = options.find((opt) => opt.value === value)
+
+  // Check if dropdown should open upward
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      const dropdownHeight = 320 // max-h-80 = 20rem = 320px
+      
+      // Open upward if not enough space below and more space above
+      setOpenUpward(spaceBelow < dropdownHeight && spaceAbove > spaceBelow)
+    }
+  }, [isOpen])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -71,6 +86,7 @@ export function Select({
 
       {/* Trigger Button */}
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
@@ -110,7 +126,9 @@ export function Select({
           />
 
           {/* Options List */}
-          <div className="absolute z-20 w-full mt-2 bg-background border border-border rounded-lg shadow-xl max-h-80 overflow-y-auto">
+          <div className={`absolute z-20 w-full bg-background border border-border rounded-lg shadow-xl max-h-80 overflow-y-auto ${
+            openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
+          }`}>
             {options.map((option) => (
               <button
                 key={option.value}
