@@ -13,10 +13,21 @@ export function ChatInput({ conversationId }: ChatInputProps) {
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => conversationService.sendMessage(conversationId, text),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Check if backend returned an error
+      if (!data.success && data.error) {
+        // Don't clear message on error, show error to user
+        return
+      }
+      
+      // Success - invalidate queries and clear input
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', conversationId] })
       queryClient.invalidateQueries({ queryKey: ['agent-conversations'] })
       setMessage('')
+    },
+    onError: (error) => {
+      // Network or other errors - handled by error display below
+      console.error('Failed to send message:', error)
     },
   })
 
@@ -67,6 +78,16 @@ export function ChatInput({ conversationId }: ChatInputProps) {
                'Please try again.'}
             </p>
           )}
+        </div>
+      )}
+      
+      {/* Backend error (success: false) */}
+      {sendMutation.isSuccess && sendMutation.data && !sendMutation.data.success && sendMutation.data.error && (
+        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <p className="text-sm text-red-600 dark:text-red-400 font-medium">Agent Error</p>
+          <p className="text-xs text-red-500 dark:text-red-400 mt-1 font-mono">
+            {sendMutation.data.error}
+          </p>
         </div>
       )}
     </div>

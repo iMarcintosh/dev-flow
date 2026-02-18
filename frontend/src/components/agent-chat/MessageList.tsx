@@ -39,7 +39,7 @@ export function MessageList({ conversationId }: MessageListProps) {
       setIsThinking(true)
     }
     
-    // If assistant responded, hide thinking
+    // If assistant responded OR if there was an error, hide thinking
     if (!isUserMessage) {
       setIsThinking(false)
     }
