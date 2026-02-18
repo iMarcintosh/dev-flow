@@ -5,7 +5,7 @@ Executes custom agents configured by users with their specific
 models, prompts, tools, and parameters.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, AsyncGenerator
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -136,3 +136,85 @@ async def test_agent(
         user_id=user_id,
         input_text=test_input,
     )
+
+
+async def run_custom_agent_streaming(
+    db: AsyncSession,
+    agent_id: UUID,
+    user_id: UUID,
+    input_text: str,
+    project_id: Optional[UUID] = None,
+    conversation_id: Optional[UUID] = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Execute a custom agent with streaming responses.
+    
+    Args:
+        db: Database session
+        agent_id: ID of the custom agent to run
+        user_id: ID of the user running the agent
+        input_text: User's input message
+        project_id: Optional project context for board tools
+        conversation_id: Optional conversation ID for context
+    
+    Yields:
+        Chunks of the agent's response
+    """
+    # Load agent configuration
+    result = await db.execute(
+        select(CustomAgent).where(CustomAgent.id == agent_id)
+    )
+    agent = result.scalar_one_or_none()
+    
+    if not agent:
+        raise ValueError(f"Agent {agent_id} not found")
+    
+    # Check access permissions
+    if agent.visibility == "private" and agent.user_id != user_id:
+        raise ValueError("Access denied to private agent")
+    
+    # Create LLM with agent's configuration
+    llm = await create_llm(
+        model_name=agent.model_name,
+        user_id=user_id,
+        temperature=agent.temperature,
+        max_tokens=agent.max_tokens,
+    )
+    
+    # Apply additional parameters
+    if hasattr(llm, 'top_p'):
+        llm.top_p = agent.top_p
+    
+    # Bind tools if enabled
+    if agent.enabled_tools:
+        llm = bind_tools_to_llm(
+            llm=llm,
+            tool_names=agent.enabled_tools,
+            db=db,
+            user_id=str(user_id),
+            project_id=str(project_id) if project_id else None,
+            agent_id=str(agent_id),
+        )
+    
+    # Create messages with system prompt
+    messages = [
+        SystemMessage(content=agent.system_prompt),
+        HumanMessage(content=input_text),
+    ]
+    
+    # Stream agent response
+    try:
+        async for chunk in llm.astream(messages):
+            if hasattr(chunk, 'content'):
+                content = chunk.content
+                if content:
+                    yield content
+        
+        # Update usage stats
+        agent.run_count += 1
+        from sqlalchemy.sql import func
+        agent.last_used_at = func.now()
+        await db.commit()
+        
+    except Exception as e:
+        yield f"\n\n❌ Error: {str(e)}"

@@ -89,3 +89,20 @@ async def get_current_user(
         )
     
     return user
+
+
+async def get_current_user_ws(token: str, db: AsyncSession):
+    """Get current user for WebSocket connections."""
+    from app.models.user import User
+    
+    user_id = verify_token(token, "access")
+    
+    if user_id is None:
+        return None
+    
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    return user
+

@@ -53,8 +53,9 @@ app.include_router(custom_agents.router)
 app.include_router(agent_chat.router)
 app.include_router(teams.router)
 
-from app.api.routes import knowledge_base
+from app.api.routes import knowledge_base, websocket
 app.include_router(knowledge_base.router)
+app.include_router(websocket.router)
 
 
 @app.on_event("startup")
