@@ -37,7 +37,7 @@ export const uploadFile = async (agentId: string, file: File): Promise<UploadRes
   const formData = new FormData();
   formData.append('file', file);
   
-  const response = await api.post(`/knowledge-base/${agentId}/upload`, formData, {
+  const response = await api.post(`/api/knowledge-base/${agentId}/upload`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -50,7 +50,7 @@ export const uploadFile = async (agentId: string, file: File): Promise<UploadRes
  * List all files in agent's knowledge base
  */
 export const listFiles = async (agentId: string): Promise<KnowledgeFile[]> => {
-  const response = await api.get(`/knowledge-base/${agentId}/files`);
+  const response = await api.get(`/api/knowledge-base/${agentId}/files`);
   return response.data;
 };
 
@@ -58,7 +58,7 @@ export const listFiles = async (agentId: string): Promise<KnowledgeFile[]> => {
  * Delete file from knowledge base
  */
 export const deleteFile = async (agentId: string, fileId: string): Promise<void> => {
-  await api.delete(`/knowledge-base/${agentId}/files/${fileId}`);
+  await api.delete(`/api/knowledge-base/${agentId}/files/${fileId}`);
 };
 
 /**
@@ -69,7 +69,7 @@ export const searchKnowledgeBase = async (
   query: string,
   nResults: number = 5
 ): Promise<SearchResult[]> => {
-  const response = await api.post(`/knowledge-base/${agentId}/search`, {
+  const response = await api.post(`/api/knowledge-base/${agentId}/search`, {
     query,
     n_results: nResults,
   });
