@@ -304,20 +304,20 @@ function AnalyticsTab({
         <div className="p-4 bg-background border border-border rounded-lg">
           <div className="text-sm text-muted-foreground mb-1">Total Tokens</div>
           <div className="text-2xl font-bold text-foreground">
-            {summary.total_tokens.toLocaleString()}
+            {(summary.total_tokens || 0).toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
-            Prompt: {summary.prompt_tokens.toLocaleString()} • 
-            Completion: {summary.completion_tokens.toLocaleString()}
+            Prompt: {(summary.prompt_tokens || 0).toLocaleString()} • 
+            Completion: {(summary.completion_tokens || 0).toLocaleString()}
           </div>
         </div>
       </div>
 
       {/* Tool Calls */}
-      {summary.tool_calls_count > 0 && (
+      {(summary.tool_calls_count || 0) > 0 && (
         <div className="p-4 bg-background border border-border rounded-lg">
           <div className="text-sm text-muted-foreground mb-1">Tool Calls</div>
-          <div className="text-2xl font-bold text-foreground">{summary.tool_calls_count}</div>
+          <div className="text-2xl font-bold text-foreground">{summary.tool_calls_count || 0}</div>
         </div>
       )}
     </div>
