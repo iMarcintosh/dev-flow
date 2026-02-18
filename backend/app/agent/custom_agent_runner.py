@@ -7,6 +7,7 @@ models, prompts, tools, and parameters.
 
 from typing import Optional, Dict, Any, AsyncGenerator
 from uuid import UUID
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -83,8 +84,13 @@ async def run_custom_agent(
     # TODO: Add conversation history if conversation_id provided
     
     # Execute agent
+    start_time = datetime.now()
+    success = False
+    tools_used = []
+    
     try:
         response = await llm.ainvoke(messages)
+        success = True
         
         # Update usage stats
         agent.run_count += 1
@@ -92,16 +98,39 @@ async def run_custom_agent(
         agent.last_used_at = func.now()
         await db.commit()
         
+        # Track analytics
+        response_time = (datetime.now() - start_time).total_seconds()
+        from app.services.analytics import analytics_service
+        await analytics_service.track_agent_run(
+            db=db,
+            agent_id=agent_id,
+            user_id=user_id,
+            success=True,
+            response_time=response_time,
+            tools_used=tools_used
+        )
+        
         return {
             "success": True,
             "response": response.content,
             "agent_name": agent.name,
             "agent_id": str(agent.id),
             "model": agent.model_name,
-            "tools_used": [],  # TODO: Track tool calls
+            "tools_used": tools_used,
         }
     
     except Exception as e:
+        # Track failed run
+        response_time = (datetime.now() - start_time).total_seconds()
+        from app.services.analytics import analytics_service
+        await analytics_service.track_agent_run(
+            db=db,
+            agent_id=agent_id,
+            user_id=user_id,
+            success=False,
+            response_time=response_time
+        )
+        
         return {
             "success": False,
             "error": str(e),
