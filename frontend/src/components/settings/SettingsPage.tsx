@@ -1,8 +1,9 @@
 import { AppLayout } from '@/components/layout/AppLayout'
 import { useAuthStore } from '@/stores/authStore'
-import { User, Mail, Shield, Calendar, Cpu, RefreshCw, Save, Loader2 } from 'lucide-react'
+import { User, Mail, Shield, Calendar, Cpu, RefreshCw, Save, Loader2, Key } from 'lucide-react'
 import { useAvailableModels, useUpdateUserPreferences, useRefreshModels } from '@/services/queries'
 import ModelSelector from './ModelSelector'
+import { APIKeysSection } from './APIKeysSection'
 import { useState, useEffect } from 'react'
 
 export default function SettingsPage() {
@@ -268,40 +269,21 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 )}
-
-                {/* API Key Status */}
-                <div className="pt-4 border-t border-gray-700">
-                  <p className="text-sm font-medium text-gray-300 mb-3">API Key Status</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="px-3 py-2 bg-gray-800 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        <span className="text-xs text-gray-400">Anthropic</span>
-                      </div>
-                    </div>
-                    <div className="px-3 py-2 bg-gray-800 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-gray-600"></div>
-                        <span className="text-xs text-gray-400">OpenAI</span>
-                      </div>
-                    </div>
-                    <div className="px-3 py-2 bg-gray-800 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-gray-600"></div>
-                        <span className="text-xs text-gray-400">OpenRouter</span>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Configure API keys in your .env file to enable additional providers
-                  </p>
-                </div>
               </div>
             ) : (
               <div className="text-center py-8 text-gray-400">
                 Failed to load models. Please try refreshing.
               </div>
             )}
+          </div>
+
+          {/* API Keys Section */}
+          <div className="bg-card border border-border rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
+              <Key className="w-5 h-5" />
+              API Keys
+            </h2>
+            <APIKeysSection />
           </div>
 
           {/* Preferences Section */}

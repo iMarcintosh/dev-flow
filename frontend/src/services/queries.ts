@@ -220,3 +220,71 @@ export const useRefreshModels = () => {
     },
   })
 }
+
+// API Keys Management
+export interface ApiKeyStatus {
+  provider: string
+  status: 'personal' | 'global' | 'none'
+  masked_key: string | null
+}
+
+export interface ApiKeyStatusResponse {
+  keys: ApiKeyStatus[]
+}
+
+export interface TestKeyRequest {
+  provider: 'anthropic' | 'openai' | 'openrouter'
+  api_key: string
+}
+
+export interface TestKeyResponse {
+  valid: boolean
+  error: string | null
+}
+
+export const useApiKeyStatus = () => {
+  return useQuery({
+    queryKey: ['api-keys', 'status'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiKeyStatusResponse>('/api/api-keys/status')
+      return data
+    },
+  })
+}
+
+export const useTestApiKey = () => {
+  return useMutation({
+    mutationFn: async (request: TestKeyRequest) => {
+      const { data } = await api.post<TestKeyResponse>('/api/api-keys/test', request)
+      return data
+    },
+  })
+}
+
+export const useUpdateApiKey = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ provider, api_key }: { provider: string; api_key: string }) => {
+      const { data } = await api.put(`/api/api-keys/${provider}`, { api_key })
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-keys', 'status'] })
+    },
+  })
+}
+
+export const useDeleteApiKey = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (provider: string) => {
+      const { data } = await api.delete(`/api/api-keys/${provider}`)
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api-keys', 'status'] })
+    },
+  })
+}
