@@ -158,6 +158,7 @@ export default function AgentHubPage() {
                       onDeleted={() =>
                         queryClient.invalidateQueries({ queryKey: ['custom-agents'] })
                       }
+                      onViewDetails={() => setSelectedAgentForDetails(agent)}
                     />
                   ))}
                 </div>
@@ -212,6 +213,18 @@ export default function AgentHubPage() {
       {/* Create/Edit Modal */}
       {isModalOpen && (
         <AgentModal agent={editingAgent} onClose={handleCloseModal} onSave={handleSaveAgent} />
+      )}
+
+      {/* Agent Details Modal */}
+      {selectedAgentForDetails && (
+        <AgentDetailsModal
+          agent={selectedAgentForDetails}
+          onClose={() => setSelectedAgentForDetails(null)}
+          onEdit={() => {
+            setSelectedAgentForDetails(null)
+            handleEditAgent(selectedAgentForDetails)
+          }}
+        />
       )}
     </AppLayout>
   )
