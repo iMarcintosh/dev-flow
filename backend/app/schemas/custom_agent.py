@@ -2,6 +2,40 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from uuid import UUID
+import re
+
+
+def validate_cron_expression(cron: str) -> bool:
+    """Validate cron expression format (simplified validation)"""
+    parts = cron.strip().split()
+    if len(parts) != 5:
+        return False
+    
+    # Simple validation - check each part is valid
+    ranges = [
+        (0, 59),  # minute
+        (0, 23),  # hour
+        (1, 31),  # day
+        (1, 12),  # month
+        (0, 6),   # weekday
+    ]
+    
+    for i, part in enumerate(parts):
+        if part == '*':
+            continue
+        if '/' in part:  # Step values like */5
+            continue
+        if '-' in part:  # Ranges like 1-5
+            continue
+        if ',' in part:  # Lists like 1,3,5
+            continue
+        try:
+            val = int(part)
+            if not (ranges[i][0] <= val <= ranges[i][1]):
+                return False
+        except ValueError:
+            return False
+    return True
 
 
 # Team Schemas
@@ -66,11 +100,36 @@ class CustomAgentBase(BaseModel):
     # Tools
     enabled_tools: List[str] = Field(default_factory=list)
     tool_config: Dict[str, Any] = Field(default_factory=dict)
+    
+    # Scheduling
+    trigger: str = Field(default="manual", pattern="^(manual|chat|scheduled)$")
+    schedule: Optional[str] = None
+    schedule_enabled: bool = Field(default=True)
+    
+    @field_validator('schedule')
+    @classmethod
+    def validate_schedule(cls, v, info):
+        if v is not None:
+            if not validate_cron_expression(v):
+                raise ValueError('Invalid cron expression format')
+        return v
+    
+    @field_validator('trigger')
+    @classmethod
+    def validate_trigger_schedule(cls, v, info):
+        # Will be checked after all fields are populated
+        return v
 
 
 class CustomAgentCreate(CustomAgentBase):
     team_id: Optional[UUID] = None
     template_id: Optional[UUID] = None
+    
+    def validate_schedule_required(self):
+        """Validate that schedule is provided when trigger is 'scheduled'"""
+        if self.trigger == 'scheduled' and not self.schedule:
+            raise ValueError('Schedule is required when trigger is set to "scheduled"')
+        return self
 
 
 class CustomAgentUpdate(BaseModel):
@@ -89,7 +148,19 @@ class CustomAgentUpdate(BaseModel):
     enabled_tools: Optional[List[str]] = None
     tool_config: Optional[Dict[str, Any]] = None
     
+    # Scheduling
+    trigger: Optional[str] = Field(None, pattern="^(manual|chat|scheduled)$")
+    schedule: Optional[str] = None
+    schedule_enabled: Optional[bool] = None
+    
     team_id: Optional[UUID] = None
+    
+    @field_validator('schedule')
+    @classmethod
+    def validate_schedule(cls, v):
+        if v is not None and not validate_cron_expression(v):
+            raise ValueError('Invalid cron expression format')
+        return v
 
 
 class CustomAgentResponse(CustomAgentBase):
@@ -99,6 +170,10 @@ class CustomAgentResponse(CustomAgentBase):
     
     is_template: bool
     template_id: Optional[UUID]
+    
+    # Scheduling
+    last_scheduled_run: Optional[datetime]
+    next_scheduled_run: Optional[datetime]
     
     run_count: int
     star_count: int

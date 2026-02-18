@@ -35,6 +35,13 @@ class CustomAgent(Base):
     enabled_tools = Column(JSONB, nullable=False, server_default='[]')
     tool_config = Column(JSONB, nullable=False, server_default='{}')
     
+    # Scheduling
+    trigger = Column(String(20), nullable=False, server_default='manual')  # 'manual', 'chat', 'scheduled'
+    schedule = Column(String(100), nullable=True)  # Cron format: "0 9 * * *"
+    schedule_enabled = Column(Boolean, nullable=False, server_default='true')
+    last_scheduled_run = Column(DateTime, nullable=True)
+    next_scheduled_run = Column(DateTime, nullable=True)
+    
     # Stats
     run_count = Column(Integer, nullable=False, server_default='0')
     star_count = Column(Integer, nullable=False, server_default='0')  # For marketplace
