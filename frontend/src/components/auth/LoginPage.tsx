@@ -37,17 +37,17 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         {/* Logo with glow */}
-        <div className="text-center mb-8 relative">
+        <div className="text-center mb-2 relative">
           <div className="relative inline-block">
-            {/* Animated glow effect */}
-            <div className="absolute inset-0 blur-3xl bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 animate-glow-pulse" />
+            {/* Smaller, tighter glow effect */}
+            <div className="absolute inset-0 blur-2xl bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 animate-glow-pulse" />
             <img 
               src={logoLarge} 
               alt="DevFlow Logo" 
-              className="relative w-64 h-auto mx-auto mb-4 drop-shadow-2xl"
+              className="relative w-[32rem] h-auto mx-auto mb-1 drop-shadow-2xl"
             />
           </div>
-          <p className="text-muted-foreground">Sign in to your account</p>
+          <p className="text-muted-foreground text-sm mb-2">Sign in to your account</p>
         </div>
 
         {/* Login card with glow */}

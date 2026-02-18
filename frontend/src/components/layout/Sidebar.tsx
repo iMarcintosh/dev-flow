@@ -21,13 +21,13 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col border-r border-border bg-card">
       {/* Logo with subtle glow */}
-      <div className="relative flex h-16 items-center border-b border-border px-4">
+      <div className="relative flex h-20 items-center justify-center border-b border-border px-6">
         {/* Subtle glow */}
-        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 to-purple-500/10 blur-xl" />
+        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 to-purple-500/5 blur-xl" />
         <img 
           src={logoHorizontal} 
           alt="DevFlow" 
-          className="relative h-8 w-auto drop-shadow-lg"
+          className="relative w-full h-auto max-h-16 object-contain drop-shadow-lg"
         />
       </div>
 
@@ -42,19 +42,15 @@ export function Sidebar() {
               key={item.name}
               to={item.href}
               className={`
-                group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all
+                group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
                 ${active
-                  ? 'bg-primary/10 text-primary shadow-lg shadow-primary/20'
+                  ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }
               `}
             >
-              {/* Active item glow */}
-              {active && (
-                <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 to-purple-500/20 rounded-lg blur-sm" />
-              )}
-              <Icon className={`relative h-5 w-5 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
-              <span className="relative">{item.name}</span>
+              <Icon className={`h-5 w-5 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
+              {item.name}
             </Link>
           )
         })}
