@@ -1,9 +1,14 @@
-import { Item, ItemType, ItemPriority, ItemStatus } from '@/types'
-import { Bug, CheckCircle2, Circle, GitBranch, Lightbulb, Zap } from 'lucide-react'
+import { useState } from 'react'
+import { Item } from '@/types'
+import { Bug, CheckCircle2, Circle, GitBranch, Lightbulb, MessageSquare } from 'lucide-react'
+import { AgentBadge } from '@/components/board/AgentBadge'
+import { AgentAssignButton } from '@/components/board/AgentAssignButton'
+import { AgentActionModal } from '@/components/board/AgentActionModal'
 
 interface ItemCardProps {
   item: Item
   onClick: () => void
+  projectId: string
 }
 
 const typeIcons = {
@@ -29,16 +34,23 @@ const priorityColors = {
   critical: 'bg-red-500',
 }
 
-export default function ItemCard({ item, onClick }: ItemCardProps) {
+export default function ItemCard({ item, onClick, projectId }: ItemCardProps) {
+  const [showAgentModal, setShowAgentModal] = useState(false)
   const Icon = typeIcons[item.type]
   const typeColor = typeColors[item.type]
   const priorityColor = priorityColors[item.priority]
 
+  const handleAskAgent = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowAgentModal(true)
+  }
+
   return (
-    <div
-      onClick={onClick}
-      className="bg-card border border-border rounded-lg p-4 cursor-pointer hover:bg-card-hover hover:border-primary/30 transition-all group"
-    >
+    <>
+      <div
+        onClick={onClick}
+        className="bg-card border border-border rounded-lg p-4 cursor-pointer hover:bg-card-hover hover:border-primary/30 transition-all group"
+      >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className={`flex items-center gap-2 px-2 py-1 rounded border ${typeColor} text-xs font-medium`}>
@@ -79,15 +91,36 @@ export default function ItemCard({ item, onClick }: ItemCardProps) {
         </div>
       )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>#{item.id.slice(0, 8)}</span>
-        {item.assignee_id && (
-          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="text-primary font-medium">A</span>
+      {/* Agent Section */}
+      {item.assigned_agent_id ? (
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
+          <AgentBadge agentId={item.assigned_agent_id} />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleAskAgent}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-primary/10 hover:bg-primary/20 text-primary rounded transition-colors"
+            >
+              <MessageSquare className="w-3 h-3" />
+              Ask
+            </button>
+            <AgentAssignButton item={item} projectId={projectId} />
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="pt-3 border-t border-border">
+          <AgentAssignButton item={item} projectId={projectId} />
+        </div>
+      )}
     </div>
+
+    {/* Agent Action Modal */}
+    {showAgentModal && item.assigned_agent_id && (
+      <AgentActionModal
+        item={item}
+        agentId={item.assigned_agent_id}
+        onClose={() => setShowAgentModal(false)}
+      />
+    )}
+  </>
   )
 }

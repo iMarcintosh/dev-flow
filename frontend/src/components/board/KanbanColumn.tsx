@@ -8,6 +8,7 @@ interface KanbanColumnProps {
   id: ItemStatus
   title: string
   items: Item[]
+  projectId: string
   onItemClick: (item: Item) => void
 }
 
@@ -18,7 +19,7 @@ const statusColors = {
   done: 'border-green-500/20',
 }
 
-export default function KanbanColumn({ id, title, items, onItemClick }: KanbanColumnProps) {
+export default function KanbanColumn({ id, title, items, projectId, onItemClick }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id })
 
   return (
@@ -46,7 +47,7 @@ export default function KanbanColumn({ id, title, items, onItemClick }: KanbanCo
         <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-3">
             {items.map((item) => (
-              <SortableItemCard key={item.id} item={item} onItemClick={onItemClick} />
+              <SortableItemCard key={item.id} item={item} projectId={projectId} onItemClick={onItemClick} />
             ))}
           </div>
         </SortableContext>

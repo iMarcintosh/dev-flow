@@ -17,6 +17,7 @@ import ItemCard from '@/components/cards/ItemCard'
 import { useUpdateItemStatus } from '@/services/queries'
 
 interface KanbanBoardProps {
+  projectId: string
   items: Item[]
   onItemClick: (item: Item) => void
 }
@@ -28,7 +29,7 @@ const COLUMNS: { id: ItemStatus; title: string }[] = [
   { id: 'done', title: 'Done' },
 ]
 
-export default function KanbanBoard({ items, onItemClick }: KanbanBoardProps) {
+export default function KanbanBoard({ projectId, items, onItemClick }: KanbanBoardProps) {
   const [activeItem, setActiveItem] = useState<Item | null>(null)
   const updateStatus = useUpdateItemStatus()
 
@@ -123,6 +124,7 @@ export default function KanbanBoard({ items, onItemClick }: KanbanBoardProps) {
             id={column.id}
             title={column.title}
             items={itemsByStatus[column.id]}
+            projectId={projectId}
             onItemClick={onItemClick}
           />
         ))}
@@ -131,7 +133,7 @@ export default function KanbanBoard({ items, onItemClick }: KanbanBoardProps) {
       <DragOverlay>
         {activeItem ? (
           <div className="rotate-3">
-            <ItemCard item={activeItem} onClick={() => {}} />
+            <ItemCard item={activeItem} projectId={projectId} onClick={() => {}} />
           </div>
         ) : null}
       </DragOverlay>

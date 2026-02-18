@@ -65,7 +65,11 @@ export default function BoardPage() {
 
       {/* Board */}
       <div className="max-w-7xl mx-auto p-8 h-[calc(100vh-8rem)]">
-        <KanbanBoard items={items || []} onItemClick={setSelectedItem} />
+        <KanbanBoard 
+          items={items || []} 
+          projectId={currentProject.id}
+          onItemClick={setSelectedItem} 
+        />
       </div>
 
       {/* Item Detail Modal */}

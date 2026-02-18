@@ -66,6 +66,7 @@ export interface Item {
   status: ItemStatus
   priority: ItemPriority
   assignee_id?: string
+  assigned_agent_id?: string
   parent_id?: string
   tags: string[]
   position: number
