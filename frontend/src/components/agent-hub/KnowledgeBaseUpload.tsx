@@ -7,6 +7,7 @@ import React, { useState, useRef } from 'react';
 import { Upload, File, Trash2, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { uploadFile, listFiles, deleteFile, type KnowledgeFile } from '../../services/knowledgeBase';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface KnowledgeBaseUploadProps {
   agentId: string;
@@ -17,6 +18,7 @@ const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.py', '.js', '.ts', '.tsx', 
 const KnowledgeBaseUpload: React.FC<KnowledgeBaseUploadProps> = ({ agentId }) => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ fileId: string; filename: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   
@@ -60,8 +62,19 @@ const KnowledgeBaseUpload: React.FC<KnowledgeBaseUploadProps> = ({ agentId }) =>
     mutationFn: (fileId: string) => deleteFile(agentId, fileId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['knowledge-files', agentId] });
+      setDeleteConfirm(null);
     },
   });
+
+  const handleDeleteClick = (fileId: string, filename: string) => {
+    setDeleteConfirm({ fileId, filename });
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteConfirm) {
+      deleteMutation.mutate(deleteConfirm.fileId);
+    }
+  };
   
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -197,11 +210,7 @@ const KnowledgeBaseUpload: React.FC<KnowledgeBaseUploadProps> = ({ agentId }) =>
               </div>
               
               <button
-                onClick={() => {
-                  if (confirm(`Delete ${file.filename}?`)) {
-                    deleteMutation.mutate(file.file_id);
-                  }
-                }}
+                onClick={() => handleDeleteClick(file.file_id, file.filename)}
                 disabled={deleteMutation.isPending}
                 className="flex-shrink-0 p-2 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
                 title="Delete file"
@@ -231,6 +240,20 @@ const KnowledgeBaseUpload: React.FC<KnowledgeBaseUploadProps> = ({ agentId }) =>
           <li>Enable "Knowledge Base" tool when creating conversations</li>
         </ul>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => setDeleteConfirm(null)}
+          onConfirm={handleDeleteConfirm}
+          title="Delete File"
+          message={`Are you sure you want to delete "${deleteConfirm.filename}"?\n\nThis will remove all associated knowledge base chunks. This action cannot be undone.`}
+          confirmText="Delete"
+          confirmVariant="danger"
+          isLoading={deleteMutation.isPending}
+        />
+      )}
     </div>
   );
 };

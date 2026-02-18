@@ -1,7 +1,9 @@
-import { useMutation } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation } from '@tantml:request-query'
 import { Edit2, Trash2, MessageSquare, Star, Download, Lock, Users, Globe } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent } from '@/types/custom-agent'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 interface AgentCardProps {
   agent: CustomAgent
@@ -18,10 +20,13 @@ export function AgentCard({
   onDeleted,
   onInstalled,
 }: AgentCardProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   const deleteMutation = useMutation({
     mutationFn: () => customAgentService.deleteAgent(agent.id),
     onSuccess: () => {
       onDeleted?.()
+      setShowDeleteConfirm(false)
     },
   })
 
@@ -34,9 +39,7 @@ export function AgentCard({
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (confirm(`Delete agent "${agent.name}"?`)) {
-      deleteMutation.mutate()
-    }
+    setShowDeleteConfirm(true)
   }
 
   const handleEdit = (e: React.MouseEvent) => {
@@ -169,6 +172,18 @@ export function AgentCard({
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Delete Agent"
+        message={`Are you sure you want to delete "${agent.name}"?\n\nThis will also delete all conversations and knowledge base data associated with this agent. This action cannot be undone.`}
+        confirmText="Delete Agent"
+        confirmVariant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   )
 }

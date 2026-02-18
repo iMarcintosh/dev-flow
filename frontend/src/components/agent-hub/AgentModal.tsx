@@ -408,23 +408,25 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
         </form>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-foreground hover:bg-accent rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isEdit ? 'Save Changes' : 'Create Agent'}
-          </button>
-        </div>
+        {activeTab === 'config' && (
+          <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-foreground hover:bg-accent rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isEdit ? 'Save Changes' : 'Create Agent'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

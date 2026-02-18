@@ -3,6 +3,7 @@ import { Item, ItemType, ItemPriority } from '@/types'
 import { useUpdateItem, useDeleteItem } from '@/services/queries'
 import { X, Trash2, Save } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 interface ItemDetailModalProps {
   item: Item
@@ -15,6 +16,7 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
   const [acceptanceCriteria, setAcceptanceCriteria] = useState(item.acceptance_criteria || '')
   const [priority, setPriority] = useState(item.priority)
   const [type, setType] = useState(item.type)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const updateItem = useUpdateItem()
   const deleteItem = useDeleteItem()
@@ -38,11 +40,12 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
   }
 
   const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this item?')) {
-      deleteItem.mutate(item.id, {
-        onSuccess: () => onClose(),
-      })
-    }
+    deleteItem.mutate(item.id, {
+      onSuccess: () => {
+        setShowDeleteConfirm(false)
+        onClose()
+      },
+    })
   }
 
   return (
@@ -148,8 +151,9 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
         {/* Footer */}
         <div className="flex items-center justify-between p-6 border-t border-border">
           <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deleteItem.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
             Delete
@@ -173,6 +177,18 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        title="Delete Item"
+        message={`Are you sure you want to delete "${item.title}"?\n\nThis action cannot be undone.`}
+        confirmText="Delete Item"
+        confirmVariant="danger"
+        isLoading={deleteItem.isPending}
+      />
     </div>
   )
 }
