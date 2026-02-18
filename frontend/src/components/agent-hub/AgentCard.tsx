@@ -72,7 +72,10 @@ export function AgentCard({
   }[agent.visibility]
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all hover:shadow-lg group">
+    <div 
+      onClick={onViewDetails}
+      className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-all hover:shadow-lg group cursor-pointer"
+    >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3 flex-1">
