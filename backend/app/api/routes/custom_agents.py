@@ -4,7 +4,7 @@ API endpoints for Custom Agent management.
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -94,6 +94,7 @@ async def list_marketplace_agents(
 @router.post("", response_model=CustomAgentResponse, status_code=201)
 async def create_agent(
     agent_data: CustomAgentCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -101,8 +102,13 @@ async def create_agent(
     Create a new custom agent.
     
     Can be created from scratch or from a template.
+    Supports scheduling for automated execution.
     """
     try:
+        # Validate scheduling
+        if agent_data.trigger == 'scheduled' and not agent_data.schedule:
+            raise ValueError('Schedule is required when trigger is set to "scheduled"')
+        
         # Validate configuration
         await custom_agent_service.validate_agent_config(agent_data)
         
@@ -112,6 +118,23 @@ async def create_agent(
             user_id=current_user.id,
             agent_data=agent_data,
         )
+        
+        # Register with scheduler if scheduled
+        if agent.trigger == 'scheduled' and agent.schedule and agent.schedule_enabled:
+            from app.services.scheduler import register_scheduled_agent, calculate_next_run
+            
+            # Calculate next run
+            agent.next_scheduled_run = calculate_next_run(agent.schedule)
+            await db.commit()
+            await db.refresh(agent)
+            
+            # Register with Celery Beat
+            background_tasks.add_task(
+                register_scheduled_agent,
+                str(agent.id),
+                agent.name,
+                agent.schedule
+            )
         
         return agent
     
@@ -187,6 +210,7 @@ async def get_agent(
 async def update_agent(
     agent_id: UUID,
     agent_data: CustomAgentUpdate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -194,6 +218,7 @@ async def update_agent(
     Update an existing agent.
     
     Only the agent owner can update it.
+    Updates to schedule will re-register the agent with Celery Beat.
     """
     try:
         agent = await custom_agent_service.update_agent(
@@ -202,6 +227,19 @@ async def update_agent(
             user_id=current_user.id,
             agent_data=agent_data,
         )
+        
+        # Update schedule if changed
+        if agent_data.schedule is not None or agent_data.schedule_enabled is not None:
+            from app.services.scheduler import update_agent_schedule
+            
+            background_tasks.add_task(
+                update_agent_schedule,
+                db,
+                agent_id,
+                agent_data.schedule,
+                agent_data.schedule_enabled
+            )
+        
         return agent
     
     except ValueError as e:
@@ -211,6 +249,7 @@ async def update_agent(
 @router.delete("/{agent_id}", status_code=204)
 async def delete_agent(
     agent_id: UUID,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -219,8 +258,22 @@ async def delete_agent(
     
     Only the agent owner can delete it.
     This will also delete all associated conversations and knowledge files.
+    Removes agent from schedule if it was scheduled.
     """
     try:
+        # Get agent to check if scheduled
+        agent = await custom_agent_service.get_agent_by_id(
+            db=db,
+            agent_id=agent_id,
+            user_id=current_user.id,
+        )
+        
+        # Unregister from scheduler if needed
+        if agent and agent.trigger == 'scheduled':
+            from app.services.scheduler import unregister_scheduled_agent
+            background_tasks.add_task(unregister_scheduled_agent, str(agent_id))
+        
+        # Delete agent
         await custom_agent_service.delete_agent(
             db=db,
             agent_id=agent_id,
@@ -305,3 +358,124 @@ async def test_agent(
     )
     
     return result
+
+
+@router.get("/scheduled", response_model=List[CustomAgentResponse])
+async def list_scheduled_agents(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get all scheduled agents for the current user.
+    
+    Returns agents with trigger='scheduled' and schedule_enabled=true.
+    """
+    from sqlalchemy import select
+    
+    stmt = select(CustomAgent).where(
+        CustomAgent.user_id == current_user.id,
+        CustomAgent.trigger == "scheduled",
+        CustomAgent.schedule_enabled == True,
+    )
+    
+    result = await db.execute(stmt)
+    agents = result.scalars().all()
+    
+    return agents
+
+
+@router.post("/{agent_id}/trigger", status_code=202)
+async def trigger_agent_manually(
+    agent_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Manually trigger a scheduled agent to run immediately.
+    
+    Useful for testing scheduled agents without waiting for the schedule.
+    Returns immediately and runs the agent in the background.
+    """
+    # Verify agent exists and user has access
+    agent = await custom_agent_service.get_agent_by_id(
+        db=db,
+        agent_id=agent_id,
+        user_id=current_user.id,
+    )
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    if agent.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the agent owner can trigger it")
+    
+    # Trigger in background
+    from app.services.scheduler import run_custom_agent_scheduled
+    background_tasks.add_task(run_custom_agent_scheduled.delay, str(agent_id))
+    
+    return {
+        "status": "triggered",
+        "agent_id": str(agent_id),
+        "agent_name": agent.name,
+        "message": "Agent execution started in background"
+    }
+
+
+@router.patch("/{agent_id}/schedule", response_model=CustomAgentResponse)
+async def update_schedule(
+    agent_id: UUID,
+    schedule: Optional[str] = Query(None, description="Cron expression"),
+    enabled: Optional[bool] = Query(None, description="Enable/disable schedule"),
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update agent schedule settings.
+    
+    Args:
+        schedule: New cron expression (e.g., "0 9 * * *")
+        enabled: Enable or disable the schedule
+    
+    At least one parameter must be provided.
+    """
+    if schedule is None and enabled is None:
+        raise HTTPException(status_code=400, detail="Must provide schedule or enabled parameter")
+    
+    # Verify agent exists and user has access
+    agent = await custom_agent_service.get_agent_by_id(
+        db=db,
+        agent_id=agent_id,
+        user_id=current_user.id,
+    )
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    if agent.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the agent owner can update schedule")
+    
+    # Validate cron if provided
+    if schedule is not None:
+        from app.schemas.custom_agent import validate_cron_expression
+        if not validate_cron_expression(schedule):
+            raise HTTPException(status_code=400, detail="Invalid cron expression")
+    
+    # Update schedule
+    from app.services.scheduler import update_agent_schedule
+    
+    success = await update_agent_schedule(
+        db=db,
+        agent_id=agent_id,
+        schedule=schedule,
+        enabled=enabled
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update schedule")
+    
+    # Refresh agent to get updated values
+    await db.refresh(agent)
+    
+    return agent
