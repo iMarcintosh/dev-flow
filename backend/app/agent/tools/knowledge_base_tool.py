@@ -12,7 +12,7 @@ from app.services.knowledge_base import knowledge_base_service
 
 class KnowledgeBaseInput(BaseModel):
     """Input schema for knowledge base search"""
-    query: str = Field(description="Search query to find relevant information in knowledge base")
+    query: str = Field(..., description="Search query to find relevant information in knowledge base")
 
 
 class KnowledgeBaseTool(BaseTool):
@@ -26,6 +26,7 @@ class KnowledgeBaseTool(BaseTool):
         "Returns the most relevant text chunks from uploaded files."
     )
     args_schema: Type[BaseModel] = KnowledgeBaseInput
+    return_direct: bool = False
     agent_id: str = ""  # Will be set when tool is created
     
     def _run(self, query: str) -> str:

@@ -4,6 +4,7 @@ import { Loader2, Bot, User } from 'lucide-react'
 import { conversationService } from '@/services/custom-agents'
 import type { AgentMessage } from '@/types/custom-agent'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
@@ -134,7 +135,36 @@ function MessageBubble({ message }: MessageBubbleProps) {
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
+                  // Custom table styling
+                  table({ children }) {
+                    return (
+                      <div className="my-4 overflow-x-auto">
+                        <table className="min-w-full divide-y divide-border border border-border rounded-lg">
+                          {children}
+                        </table>
+                      </div>
+                    )
+                  },
+                  thead({ children }) {
+                    return <thead className="bg-muted">{children}</thead>
+                  },
+                  th({ children }) {
+                    return (
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        {children}
+                      </th>
+                    )
+                  },
+                  td({ children }) {
+                    return (
+                      <td className="px-4 py-2 text-sm text-foreground border-t border-border">
+                        {children}
+                      </td>
+                    )
+                  },
+                  // Custom code block styling
                   code({ node, inline, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || '')
                     const language = match ? match[1] : ''
