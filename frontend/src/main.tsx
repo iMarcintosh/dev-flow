@@ -10,6 +10,7 @@ import AgentHubPage from './components/agent-hub/AgentHubPage'
 import AgentChatPage from './components/agent-chat/AgentChatPage'
 import SettingsPage from './components/settings/SettingsPage'
 import TeamManagementPage from './components/teams/TeamManagementPage'
+import { ToastProvider } from './hooks/useToast'
 
 const queryClient = new QueryClient()
 
@@ -88,7 +89,9 @@ declare module '@tanstack/react-router' {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 )

@@ -7,6 +7,8 @@ import { AVAILABLE_TOOLS, DEFAULT_AGENT_ICON } from '@/types/custom-agent'
 import { useAvailableModels } from '@/services/queries'
 import ModelSelector from '@/components/settings/ModelSelector'
 import KnowledgeBaseUpload from './KnowledgeBaseUpload'
+import { useToast } from '@/hooks/useToast'
+import { getErrorMessage, getValidationErrors } from '@/utils/errorHandler'
 
 interface AgentModalProps {
   agent?: CustomAgent | null
@@ -18,6 +20,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const isEdit = !!agent
   const [activeTab, setActiveTab] = useState<'config' | 'knowledge'>('config')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const toast = useToast()
 
   const [formData, setFormData] = useState({
     name: agent?.name || '',
@@ -38,16 +41,16 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const createMutation = useMutation({
     mutationFn: (data: CustomAgentCreate) => customAgentService.createAgent(data),
     onSuccess: () => {
+      toast.success('Agent created successfully!')
       onSave()
     },
     onError: (error: any) => {
-      // Handle validation errors from backend
-      if (error.response?.status === 422 && error.response?.data?.detail) {
-        const validationErrors: Record<string, string> = {}
-        error.response.data.detail.forEach((err: any) => {
-          const field = err.loc[err.loc.length - 1]
-          validationErrors[field] = err.msg
-        })
+      const apiError = getErrorMessage(error)
+      toast.error(apiError.message, apiError.detail)
+      
+      // Also set form validation errors if 422
+      const validationErrors = getValidationErrors(error)
+      if (Object.keys(validationErrors).length > 0) {
         setErrors(validationErrors)
       }
     },
@@ -57,16 +60,16 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     mutationFn: (data: Partial<CustomAgentCreate>) =>
       customAgentService.updateAgent(agent!.id, data),
     onSuccess: () => {
+      toast.success('Agent updated successfully!')
       onSave()
     },
     onError: (error: any) => {
-      // Handle validation errors from backend
-      if (error.response?.status === 422 && error.response?.data?.detail) {
-        const validationErrors: Record<string, string> = {}
-        error.response.data.detail.forEach((err: any) => {
-          const field = err.loc[err.loc.length - 1]
-          validationErrors[field] = err.msg
-        })
+      const apiError = getErrorMessage(error)
+      toast.error(apiError.message, apiError.detail)
+      
+      // Also set form validation errors if 422
+      const validationErrors = getValidationErrors(error)
+      if (Object.keys(validationErrors).length > 0) {
         setErrors(validationErrors)
       }
     },
