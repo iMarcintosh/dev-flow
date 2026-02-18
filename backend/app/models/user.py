@@ -16,7 +16,13 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
-    preferred_models = Column(JSON, nullable=True)  # NEW: Model preferences per agent
+    preferred_models = Column(JSON, nullable=True)  # Model preferences per agent
+    
+    # Encrypted API keys (stored encrypted, decrypted via properties)
+    encrypted_anthropic_key = Column(String(512), nullable=True)
+    encrypted_openai_key = Column(String(512), nullable=True)
+    encrypted_openrouter_key = Column(String(512), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -24,6 +30,30 @@ class User(Base):
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
     agent_runs = relationship("AgentRun", back_populates="user")
     chat_messages = relationship("ChatMessage", back_populates="user")
+    
+    @property
+    def anthropic_api_key(self) -> str | None:
+        """Decrypt and return Anthropic API key."""
+        if not self.encrypted_anthropic_key:
+            return None
+        from app.security.encryption import decrypt_api_key
+        return decrypt_api_key(self.encrypted_anthropic_key)
+    
+    @property
+    def openai_api_key(self) -> str | None:
+        """Decrypt and return OpenAI API key."""
+        if not self.encrypted_openai_key:
+            return None
+        from app.security.encryption import decrypt_api_key
+        return decrypt_api_key(self.encrypted_openai_key)
+    
+    @property
+    def openrouter_api_key(self) -> str | None:
+        """Decrypt and return OpenRouter API key."""
+        if not self.encrypted_openrouter_key:
+            return None
+        from app.security.encryption import decrypt_api_key
+        return decrypt_api_key(self.encrypted_openrouter_key)
 
 
 class OAuthAccount(Base):
