@@ -63,19 +63,39 @@ async def run_custom_agent(
         max_tokens=agent.max_tokens,
     )
     
+    # Note: Not setting top_p as both OpenAI and Anthropic reject
+    # requests with both temperature AND top_p set
     
     # Bind tools if enabled
+    agent_executor = None
     if agent.enabled_tools:
         logger.info(f"🔧 Binding tools to LLM: {agent.enabled_tools}")
-        llm = bind_tools_to_llm(
-            llm=llm,
+        
+        from app.agent.tools.tool_registry import get_tools_list
+        
+        # Get tools list
+        tools = get_tools_list(
             tool_names=agent.enabled_tools,
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
-            agent_id=str(agent_id),  # Pass agent_id for knowledge_base tool
+            agent_id=str(agent_id),
         )
-        logger.info(f"✅ Tools bound successfully")
+        
+        if tools:
+            # Try bind_tools first (for OpenAI)
+            if hasattr(llm, 'bind_tools'):
+                llm = llm.bind_tools(tools)
+                logger.info(f"✅ Tools bound using bind_tools()")
+            else:
+                # Use AgentExecutor for models that don't support bind_tools (e.g., Claude)
+                from langgraph.prebuilt import create_react_agent
+                
+                # Create ReAct agent executor
+                agent_executor = create_react_agent(llm, tools)
+                logger.info(f"✅ Created ReAct agent with {len(tools)} tools")
+        else:
+            logger.warning("⚠️ No tools to bind!")
     
     # Create messages with system prompt
     messages = [
@@ -91,8 +111,20 @@ async def run_custom_agent(
     tools_used = []
     
     try:
-        response = await llm.ainvoke(messages)
-        success = True
+        # Check if we're using AgentExecutor
+        if agent_executor is not None:
+            # Use AgentExecutor
+            response_dict = await agent_executor.ainvoke({
+                "messages": messages
+            })
+            # Extract final response
+            response_content = response_dict['messages'][-1].content if response_dict.get('messages') else ""
+            success = True
+        else:
+            # Normal LLM invocation
+            response = await llm.ainvoke(messages)
+            response_content = response.content
+            success = True
         
         # Update usage stats
         agent.run_count += 1
@@ -114,7 +146,7 @@ async def run_custom_agent(
         
         return {
             "success": True,
-            "response": response.content,
+            "response": response_content,
             "agent_name": agent.name,
             "agent_id": str(agent.id),
             "model": agent.model_name,

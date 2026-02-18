@@ -201,6 +201,50 @@ def create_dummy_search_tool() -> Tool:
     )
 
 
+def get_tools_list(
+    tool_names: List[str],
+    db=None,
+    user_id: str = None,
+    project_id: str = None,
+    agent_id: str = None,
+) -> List[BaseTool]:
+    """
+    Get list of tools based on tool names.
+    
+    Returns a list of tool instances that can be used with bind_tools() or AgentExecutor.
+    """
+    from app.agent.tools.code_execution_tool import code_execution_tool
+    from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    tools = []
+    
+    for tool_name in tool_names:
+        if tool_name == "board":
+            if db and project_id:
+                tools.extend(create_board_tools(db, user_id, project_id))
+        
+        elif tool_name == "web_search":
+            tools.append(create_dummy_search_tool())
+        
+        elif tool_name == "code_execution":
+            tools.append(code_execution_tool)
+            logger.info(f"✅ Added code_execution tool")
+        
+        elif tool_name == "knowledge_base":
+            if agent_id:
+                kb_tool = KnowledgeBaseTool(agent_id=agent_id)
+                tools.append(kb_tool)
+                logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
+            else:
+                logger.warning(f"⚠️ knowledge_base tool requested but no agent_id provided")
+    
+    logger.info(f"📦 Prepared {len(tools)} tools: {[t.name for t in tools]}")
+    return tools
+
+
 def bind_tools_to_llm(
     llm: BaseChatModel,
     tool_names: List[str],
