@@ -9,6 +9,7 @@ celery_app = Celery(
         "app.tasks.embedding",
         "app.tasks.agent",
         "app.agent.memory.indexer",
+        "app.services.scheduler",  # Include scheduler module
     ]
 )
 
@@ -33,9 +34,9 @@ def setup_agents(sender, **kwargs):
         
         print("✓ Agents imported and registered in Celery worker")
         
-        # Setup scheduled tasks dynamically
+        # Setup scheduled built-in agents
         scheduled_agents = registry.scheduled()
-        print(f"✓ Found {len(scheduled_agents)} scheduled agents")
+        print(f"✓ Found {len(scheduled_agents)} scheduled built-in agents")
         
         for agent in scheduled_agents:
             from celery.schedules import crontab
@@ -61,9 +62,23 @@ def setup_agents(sender, **kwargs):
                 print(f"  ✓ Scheduled {agent.name}: {agent.schedule}")
             else:
                 print(f"  ✗ Invalid cron format for {agent.name}: {agent.schedule}")
+        
+        # Load and setup scheduled custom agents
+        import asyncio
+        from app.database import async_session_maker
+        from app.services.scheduler import load_scheduled_agents
+        
+        async def _load_custom_agents():
+            async with async_session_maker() as db:
+                count = await load_scheduled_agents(db)
+                print(f"✓ Loaded {count} scheduled custom agents")
+        
+        asyncio.run(_load_custom_agents())
                 
     except Exception as e:
         print(f"Error importing agents: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # Scheduled agent task
@@ -71,7 +86,7 @@ from celery import shared_task
 
 @shared_task(name="run_scheduled_agent")
 def run_scheduled_agent(agent_name: str):
-    """Run a scheduled agent for all active projects."""
+    """Run a scheduled built-in agent for all active projects."""
     import asyncio
     from app.database import async_session_maker
     from app.models.project import Project
