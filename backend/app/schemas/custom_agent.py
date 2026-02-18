@@ -60,8 +60,8 @@ class CustomAgentBase(BaseModel):
     model_name: str = Field(..., min_length=1, max_length=100)
     system_prompt: str = Field(..., min_length=1)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=4096, ge=1, le=128000)
-    top_p: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_tokens: Optional[int] = Field(default=4096, ge=1, le=128000)
+    top_p: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
     
     # Tools
     enabled_tools: List[str] = Field(default_factory=list)
