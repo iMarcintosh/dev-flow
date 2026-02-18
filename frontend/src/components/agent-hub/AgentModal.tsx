@@ -1,22 +1,17 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { X, Loader2 } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent, CustomAgentCreate } from '@/types/custom-agent'
 import { AVAILABLE_TOOLS, DEFAULT_AGENT_ICON } from '@/types/custom-agent'
-import api from '@/services/api'
+import { useAvailableModels } from '@/services/queries'
+import ModelSelector from '@/components/settings/ModelSelector'
 import KnowledgeBaseUpload from './KnowledgeBaseUpload'
 
 interface AgentModalProps {
   agent?: CustomAgent | null
   onClose: () => void
   onSave: () => void
-}
-
-interface LLMConfig {
-  provider: string
-  model: string
-  display_name: string
 }
 
 export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
@@ -36,16 +31,8 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     enabled_tools: agent?.enabled_tools || ([] as string[]),
   })
 
-  // Fetch available models from user settings
-  const { data: settings } = useQuery({
-    queryKey: ['user-settings'],
-    queryFn: async () => {
-      const { data } = await api.get('/api/settings')
-      return data
-    },
-  })
-
-  const availableModels: LLMConfig[] = settings?.llm_configs || []
+  // Fetch available models
+  const { data: models, isLoading: modelsLoading } = useAvailableModels()
 
   const createMutation = useMutation({
     mutationFn: (data: CustomAgentCreate) => customAgentService.createAgent(data),
@@ -175,21 +162,13 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
           </div>
 
           {/* Model Selection */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Model</label>
-            <select
-              value={formData.model_name}
-              onChange={(e) => setFormData({ ...formData, model_name: e.target.value })}
-              required
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            >
-              {availableModels.map((model) => (
-                <option key={model.model} value={model.model}>
-                  {model.display_name} ({model.provider})
-                </option>
-              ))}
-            </select>
-          </div>
+          <ModelSelector
+            value={formData.model_name}
+            onChange={(modelId) => setFormData({ ...formData, model_name: modelId })}
+            models={models || {}}
+            label="Model"
+            disabled={modelsLoading}
+          />
 
           {/* System Prompt */}
           <div>
