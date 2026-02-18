@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation } from '@tantml:request-query'
+import { useMutation } from '@tanstack/react-query'
 import { Edit2, Trash2, MessageSquare, Star, Download, Lock, Users, Globe } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent } from '@/types/custom-agent'
