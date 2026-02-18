@@ -1,24 +1,37 @@
 export interface CustomAgent {
   id: string
   user_id: string
-  team_id?: string
+  team_id?: string | null
   name: string
-  description?: string
+  description?: string | null
   icon: string
   visibility: 'private' | 'team' | 'public'
   model_name: string
   system_prompt: string
   temperature: number
-  max_tokens?: number
-  top_p?: number
+  max_tokens?: number | null
+  top_p?: number | null
   enabled_tools: string[]
   tool_config?: Record<string, any>
+  
+  // Scheduling
+  trigger: 'manual' | 'chat' | 'scheduled'
+  schedule?: string | null
+  schedule_enabled: boolean
+  last_scheduled_run?: string | null
+  next_scheduled_run?: string | null
+  
   run_count: number
   star_count: number
   install_count: number
   created_at: string
   updated_at: string
-  last_used_at?: string
+  last_used_at?: string | null
+  
+  // Template fields
+  is_template?: boolean
+  template_id?: string | null
+  category?: string | null
 }
 
 export interface CustomAgentCreate {
@@ -34,6 +47,11 @@ export interface CustomAgentCreate {
   enabled_tools?: string[]
   tool_config?: Record<string, any>
   team_id?: string
+  
+  // Scheduling
+  trigger?: 'manual' | 'chat' | 'scheduled'
+  schedule?: string
+  schedule_enabled?: boolean
 }
 
 export interface CustomAgentUpdate {
