@@ -58,7 +58,16 @@ export function ChatInput({ conversationId }: ChatInputProps) {
       </div>
 
       {sendMutation.isError && (
-        <p className="text-sm text-red-500 mt-2">Failed to send message. Please try again.</p>
+        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <p className="text-sm text-red-600 dark:text-red-400 font-medium">Failed to send message</p>
+          {sendMutation.error && (
+            <p className="text-xs text-red-500 dark:text-red-400 mt-1">
+              {(sendMutation.error as any)?.response?.data?.error || 
+               (sendMutation.error as any)?.message || 
+               'Please try again.'}
+            </p>
+          )}
+        </div>
       )}
     </div>
   )
