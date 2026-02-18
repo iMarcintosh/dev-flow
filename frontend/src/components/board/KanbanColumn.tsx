@@ -10,6 +10,7 @@ interface KanbanColumnProps {
   items: Item[]
   projectId: string
   onItemClick: (item: Item) => void
+  onCreateItem: (status: ItemStatus) => void
 }
 
 const statusColors = {
@@ -19,7 +20,7 @@ const statusColors = {
   done: 'border-green-500/20',
 }
 
-export default function KanbanColumn({ id, title, items, projectId, onItemClick }: KanbanColumnProps) {
+export default function KanbanColumn({ id, title, items, projectId, onItemClick, onCreateItem }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id })
 
   return (
@@ -32,7 +33,11 @@ export default function KanbanColumn({ id, title, items, projectId, onItemClick 
             {items.length}
           </span>
         </div>
-        <button className="text-muted-foreground hover:text-foreground p-1 hover:bg-muted rounded transition-colors">
+        <button 
+          onClick={() => onCreateItem(id)}
+          className="text-muted-foreground hover:text-foreground p-1 hover:bg-muted rounded transition-colors"
+          title="Create new item"
+        >
           <Plus className="w-4 h-4" />
         </button>
       </div>

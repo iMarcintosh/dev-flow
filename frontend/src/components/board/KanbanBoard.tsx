@@ -14,7 +14,7 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-ki
 import { Item, ItemStatus } from '@/types'
 import KanbanColumn from './KanbanColumn'
 import ItemCard from '@/components/cards/ItemCard'
-import { useUpdateItemStatus } from '@/services/queries'
+import { useUpdateItemStatus, useCreateItem } from '@/services/queries'
 
 interface KanbanBoardProps {
   projectId: string
@@ -32,6 +32,7 @@ const COLUMNS: { id: ItemStatus; title: string }[] = [
 export default function KanbanBoard({ projectId, items, onItemClick }: KanbanBoardProps) {
   const [activeItem, setActiveItem] = useState<Item | null>(null)
   const updateStatus = useUpdateItemStatus()
+  const createItem = useCreateItem()
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -110,6 +111,19 @@ export default function KanbanBoard({ projectId, items, onItemClick }: KanbanBoa
     }
   }
 
+  const handleCreateItem = (status: ItemStatus) => {
+    const statusName = COLUMNS.find(col => col.id === status)?.title || status
+    const targetItems = itemsByStatus[status]
+    const newPosition = targetItems.length > 0 ? targetItems[targetItems.length - 1].position + 1 : 1
+    
+    createItem.mutate({
+      project_id: projectId,
+      title: `New ${statusName} Item`,
+      status,
+      position: newPosition,
+    })
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -126,6 +140,7 @@ export default function KanbanBoard({ projectId, items, onItemClick }: KanbanBoa
             items={itemsByStatus[column.id]}
             projectId={projectId}
             onItemClick={onItemClick}
+            onCreateItem={handleCreateItem}
           />
         ))}
       </div>
