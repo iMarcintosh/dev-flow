@@ -10,11 +10,14 @@ from uuid import UUID
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import logging
 
 from app.models.custom_agent import CustomAgent
 from app.agent.model_resolver import create_llm
 from app.agent.tools.tool_registry import bind_tools_to_llm
 from langchain_core.messages import HumanMessage, SystemMessage
+
+logger = logging.getLogger(__name__)
 
 
 async def run_custom_agent(
