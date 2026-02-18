@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { X, Edit2, BarChart3, Wrench, ScrollText, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { X, Edit2, BarChart3, Wrench, ScrollText, Clock, CheckCircle2, XCircle, Loader2, Calendar } from 'lucide-react'
 import type { CustomAgent } from '@/types/custom-agent'
 import { getAgentSummary, getAgentToolUsage, type AgentSummary, type ToolUsageStat } from '@/services/analytics'
 import { getAgentRuns, type AgentRun } from '@/services/agentRuns'
+import { scheduledRunsService, type ScheduledRun } from '@/services/scheduledRuns'
 
 interface AgentDetailsModalProps {
   agent: CustomAgent
@@ -11,7 +12,7 @@ interface AgentDetailsModalProps {
   onEdit: () => void
 }
 
-type TabType = 'overview' | 'analytics' | 'tools' | 'activity'
+type TabType = 'overview' | 'analytics' | 'tools' | 'activity' | 'scheduled'
 
 export function AgentDetailsModal({ agent, onClose, onEdit }: AgentDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overview')
@@ -34,16 +35,23 @@ export function AgentDetailsModal({ agent, onClose, onEdit }: AgentDetailsModalP
     enabled: activeTab === 'activity',
   })
 
+  const { data: scheduledRuns = [], isLoading: scheduledRunsLoading } = useQuery({
+    queryKey: ['scheduled-runs', agent.id],
+    queryFn: () => scheduledRunsService.getScheduledRuns(agent.id, 20),
+    enabled: activeTab === 'scheduled',
+  })
+
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview', icon: BarChart3 },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3 },
     { id: 'tools' as TabType, label: 'Tool Usage', icon: Wrench },
     { id: 'activity' as TabType, label: 'Activity Log', icon: ScrollText },
+    ...(agent.trigger === 'scheduled' ? [{ id: 'scheduled' as TabType, label: 'Scheduled Runs', icon: Calendar }] : []),
   ]
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col shadow-xl">
+      <div className="bg-card border border-border rounded-lg max-w-4xl w-full h-[85vh] flex flex-col shadow-xl">{/* Fixed height */}
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -109,6 +117,10 @@ export function AgentDetailsModal({ agent, onClose, onEdit }: AgentDetailsModalP
           )}
           {activeTab === 'activity' && (
             <ActivityLogTab runs={runs} isLoading={runsLoading} />
+          )}
+
+          {activeTab === 'scheduled' && (
+            <ScheduledRunsTab runs={scheduledRuns} isLoading={scheduledRunsLoading} />
           )}
         </div>
       </div>
@@ -465,6 +477,125 @@ function ActivityLogTab({ runs, isLoading }: { runs: AgentRun[], isLoading: bool
                     <div className="text-xs font-semibold text-red-500 mb-1">Error:</div>
                     <div className="text-xs text-red-500 bg-red-500/10 p-2 rounded">
                       {run.error_message}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Scheduled Runs Tab Component
+function ScheduledRunsTab({ 
+  runs, 
+  isLoading 
+}: { 
+  runs: ScheduledRun[]
+  isLoading: boolean 
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (runs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Calendar className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
+        <p className="text-muted-foreground mb-2">No scheduled runs yet</p>
+        <p className="text-sm text-muted-foreground/70">
+          This agent hasn't executed any scheduled runs
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {runs.map((run) => {
+        const isExpanded = expandedId === run.id
+        const statusColor = run.status === 'success' ? 'text-green-500' : 'text-red-500'
+        const StatusIcon = run.status === 'success' ? CheckCircle2 : XCircle
+
+        return (
+          <div 
+            key={run.id}
+            className="border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-colors"
+          >
+            <div 
+              className="p-4 cursor-pointer flex items-center justify-between gap-4"
+              onClick={() => setExpandedId(isExpanded ? null : run.id)}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <StatusIcon className={`w-4 h-4 flex-shrink-0 ${statusColor}`} />
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className={`text-xs font-medium ${statusColor}`}>
+                      {run.status.toUpperCase()}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(run.executed_at).toLocaleString()}
+                    </span>
+                  </div>
+                  
+                  {run.response && (
+                    <p className="text-sm text-foreground truncate">
+                      {run.response.substring(0, 100)}...
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 flex-shrink-0">
+                {run.response_time !== null && (
+                  <div className="text-xs text-muted-foreground">
+                    {run.response_time.toFixed(2)}s
+                  </div>
+                )}
+                {run.tools_used !== null && run.tools_used > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Wrench className="w-3 h-3" />
+                    {run.tools_used}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {isExpanded && (
+              <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                {run.input_text && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1">Input:</div>
+                    <div className="text-xs bg-background p-3 rounded border border-border">
+                      {run.input_text}
+                    </div>
+                  </div>
+                )}
+                
+                {run.response && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1">Response:</div>
+                    <div className="text-xs bg-background p-3 rounded border border-border whitespace-pre-wrap">
+                      {run.response}
+                    </div>
+                  </div>
+                )}
+                
+                {run.error && (
+                  <div>
+                    <div className="text-xs font-semibold text-red-500 mb-1">Error:</div>
+                    <div className="text-xs text-red-500 bg-red-500/10 p-3 rounded">
+                      {run.error}
                     </div>
                   </div>
                 )}

@@ -121,3 +121,28 @@ async def get_global_tool_usage(
     )
     
     return tool_stats
+
+
+
+
+@router.get("/agents/{agent_id}/total-runs")
+async def get_agent_total_runs(
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get total lifetime runs for an agent.
+    
+    Returns the total run count across all time (for display on agent cards).
+    """
+    # Use analytics service to avoid session conflicts
+    from datetime import timedelta, datetime
+    summary = await analytics_service.get_summary_stats(
+        db=db,
+        agent_id=UUID(agent_id),
+        user_id=None,  # Get all runs, not just for current user
+        days=36500  # ~100 years = all time
+    )
+    
+    return {"total_runs": summary.get("total_runs", 0)}

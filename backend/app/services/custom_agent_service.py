@@ -207,8 +207,11 @@ async def get_user_agents(
         include_public: Include public marketplace agents
     
     Returns:
-        List of CustomAgent objects
+        List of CustomAgent objects with run_count populated
     """
+    from app.models.analytics import AgentAnalytics
+    from sqlalchemy import func
+    
     conditions = [CustomAgent.user_id == user_id]  # User's own agents
     
     if include_team:
@@ -229,13 +232,25 @@ async def get_user_agents(
     if include_public:
         conditions.append(CustomAgent.visibility == "public")
     
+    # Query agents with analytics data joined
     result = await db.execute(
-        select(CustomAgent)
+        select(
+            CustomAgent,
+            func.coalesce(func.sum(AgentAnalytics.total_runs), 0).label("run_count")
+        )
+        .outerjoin(AgentAnalytics, CustomAgent.id == AgentAnalytics.agent_id)
         .where(or_(*conditions))
+        .group_by(CustomAgent.id)
         .order_by(CustomAgent.created_at.desc())
     )
     
-    return list(result.scalars().all())
+    # Add run_count as attribute to each agent
+    agents = []
+    for agent, run_count in result.all():
+        agent.run_count = run_count
+        agents.append(agent)
+    
+    return agents
 
 
 async def get_marketplace_agents(

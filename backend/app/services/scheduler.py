@@ -49,83 +49,66 @@ def calculate_next_run(cron_expression: str, base_time: Optional[datetime] = Non
     Returns:
         Next scheduled run datetime
     """
-    if base_time is None:
+    if not base_time:
         base_time = datetime.utcnow()
     
-    cron = croniter(cron_expression, base_time)
-    return cron.get_next(datetime)
+    try:
+        cron = croniter(cron_expression, base_time)
+        return cron.get_next(datetime)
+    except Exception as e:
+        raise ValueError(f"Invalid cron expression {cron_expression}: {e}")
 
 
-def register_scheduled_agent(agent_id: str, agent_name: str, cron_expression: str) -> bool:
+def register_scheduled_agent(agent_id: str, agent_name: str, cron_expression: str):
     """
-    Register a custom agent with Celery Beat.
+    Register an agent with Celery Beat for scheduled execution.
     
     Args:
-        agent_id: UUID of the custom agent
-        agent_name: Name of the agent
-        cron_expression: Cron schedule expression
-        
-    Returns:
-        True if successfully registered
+        agent_id: UUID string of the agent
+        agent_name: Human-readable name
+        cron_expression: Cron format schedule
     """
     try:
-        cron_params = parse_cron_schedule(cron_expression)
+        cron_kwargs = parse_cron_schedule(cron_expression)
+        schedule = crontab(**cron_kwargs)
         
-        # Create unique task name
-        task_name = f"custom-agent-{agent_id}"
-        
-        # Add periodic task to Celery Beat
-        celery_app.add_periodic_task(
-            crontab(**cron_params),
-            run_custom_agent_scheduled.s(agent_id),
-            name=task_name
-        )
+        # Register with Celery Beat
+        celery_app.conf.beat_schedule[f"custom-agent-{agent_id}"] = {
+            "task": "run_custom_agent_scheduled",
+            "schedule": schedule,
+            "args": (agent_id,),
+        }
         
         print(f"✓ Registered scheduled agent: {agent_name} ({agent_id}) - {cron_expression}")
-        return True
         
     except Exception as e:
-        print(f"✗ Failed to register scheduled agent {agent_name}: {e}")
-        return False
+        print(f"✗ Failed to register agent {agent_name}: {e}")
 
 
-def unregister_scheduled_agent(agent_id: str) -> bool:
+def unregister_scheduled_agent(agent_id: str):
     """
-    Remove a custom agent from Celery Beat schedule.
+    Remove an agent from Celery Beat schedule.
     
     Args:
-        agent_id: UUID of the custom agent
-        
-    Returns:
-        True if successfully unregistered
+        agent_id: UUID string of the agent
     """
-    try:
-        task_name = f"custom-agent-{agent_id}"
-        
-        # Remove from beat schedule
-        # Note: Celery doesn't provide direct API for this, 
-        # so we'll handle it on worker restart by only loading enabled schedules
-        
+    task_name = f"custom-agent-{agent_id}"
+    if task_name in celery_app.conf.beat_schedule:
+        del celery_app.conf.beat_schedule[task_name]
         print(f"✓ Unregistered scheduled agent: {agent_id}")
-        return True
-        
-    except Exception as e:
-        print(f"✗ Failed to unregister scheduled agent {agent_id}: {e}")
-        return False
 
 
-async def load_scheduled_agents(db: AsyncSession) -> int:
+async def load_scheduled_agents(db: AsyncSession):
     """
-    Load all enabled scheduled custom agents and register them with Celery Beat.
+    Load all scheduled custom agents and register them with Celery Beat.
+    
+    This is called during worker/beat startup.
     
     Args:
         db: Database session
-        
-    Returns:
-        Number of agents registered
     """
     try:
-        # Query all scheduled agents that are enabled
+        # Query all scheduled agents
         stmt = select(CustomAgent).where(
             CustomAgent.trigger == "scheduled",
             CustomAgent.schedule_enabled == True,
@@ -135,27 +118,23 @@ async def load_scheduled_agents(db: AsyncSession) -> int:
         result = await db.execute(stmt)
         agents = result.scalars().all()
         
-        registered_count = 0
-        
+        # Register each agent
         for agent in agents:
-            # Calculate and update next run time
-            try:
-                next_run = calculate_next_run(agent.schedule)
-                agent.next_scheduled_run = next_run
-                await db.commit()
-            except Exception as e:
-                print(f"✗ Failed to calculate next run for {agent.name}: {e}")
-                continue
+            # Calculate next run if not set
+            if not agent.next_scheduled_run and agent.schedule:
+                agent.next_scheduled_run = calculate_next_run(agent.schedule)
             
             # Register with Celery Beat
-            if register_scheduled_agent(str(agent.id), agent.name, agent.schedule):
-                registered_count += 1
+            register_scheduled_agent(str(agent.id), agent.name, agent.schedule)
         
-        print(f"✓ Loaded {registered_count} scheduled custom agents")
-        return registered_count
+        await db.commit()
+        
+        print(f"✓ Loaded {len(agents)} scheduled custom agents")
+        return len(agents)
         
     except Exception as e:
         print(f"✗ Failed to load scheduled agents: {e}")
+        await db.rollback()
         return 0
 
 
@@ -214,63 +193,77 @@ async def update_agent_schedule(
 # Import after function definitions to avoid circular imports
 from celery import shared_task
 
-@shared_task(name="run_custom_agent_scheduled")
-def run_custom_agent_scheduled(agent_id: str):
+@shared_task(name="run_custom_agent_scheduled", bind=True)
+def run_custom_agent_scheduled(self, agent_id: str):
     """
     Celery task to run a custom agent on schedule.
     
     Args:
         agent_id: UUID of the custom agent
     """
-    import asyncio
-    from app.database import async_session_maker
-    from app.agent.custom_agent_runner import run_custom_agent
-    from app.models.analytics import AgentAnalytics
-    from sqlalchemy import func
+    print(f"▶ Scheduled task triggered for agent: {agent_id}")
     
-    async def _run():
-        async with async_session_maker() as db:
-            # Get agent
-            stmt = select(CustomAgent).where(CustomAgent.id == UUID(agent_id))
-            result = await db.execute(stmt)
-            agent = result.scalar_one_or_none()
+    # Import here to avoid issues
+    from app.database import SessionLocal
+    from sqlalchemy import select as sync_select, update
+    from app.models.custom_agent import CustomAgent as SyncCustomAgent
+    
+    # Use synchronous session
+    db = SessionLocal()
+    try:
+        # Get agent (synchronous)
+        agent = db.query(SyncCustomAgent).filter(SyncCustomAgent.id == UUID(agent_id)).first()
+        
+        if not agent:
+            print(f"✗ Agent {agent_id} not found")
+            return
+        
+        if not agent.schedule_enabled:
+            print(f"✗ Agent {agent.name} schedule is disabled")
+            return
+        
+        print(f"▶ Running scheduled agent: {agent.name}")
+        
+        # Update timestamps
+        agent.last_scheduled_run = datetime.utcnow()
+        if agent.schedule:
+            agent.next_scheduled_run = calculate_next_run(agent.schedule)
+        
+        db.commit()
+        
+        # Execute the agent using sync runner
+        try:
+            from app.agent.sync_agent_runner import run_custom_agent_sync
             
-            if not agent:
-                print(f"✗ Agent {agent_id} not found")
-                return
+            # Use system prompt as input for scheduled runs
+            input_text = agent.system_prompt
             
-            if not agent.schedule_enabled:
-                print(f"✗ Agent {agent.name} schedule is disabled")
-                return
+            result = run_custom_agent_sync(
+                agent_id=UUID(agent_id),
+                user_id=agent.user_id,
+                input_text=input_text,
+            )
             
-            print(f"▶ Running scheduled agent: {agent.name}")
-            
-            try:
-                # Update last run time
-                agent.last_scheduled_run = datetime.utcnow()
-                
-                # Calculate next run
-                if agent.schedule:
-                    agent.next_scheduled_run = calculate_next_run(agent.schedule)
-                
-                await db.commit()
-                
-                # Run the agent
-                # Note: Scheduled agents run without specific user context
-                # They should be designed to work autonomously
-                result = await run_custom_agent(
-                    agent_id=UUID(agent_id),
-                    user_id=agent.user_id,
-                    message="Scheduled execution",
-                    db=db
-                )
-                
+            if result and result.get('success'):
+                response = result.get('response', '')
                 print(f"✓ Completed scheduled run for {agent.name}")
-                print(f"  Response: {result[:100]}..." if len(result) > 100 else f"  Response: {result}")
+                print(f"  Response: {response[:200]}..." if len(response) > 200 else f"  Response: {response}")
+                print(f"  Next run: {agent.next_scheduled_run}")
+            else:
+                error = result.get('error', 'Unknown error') if result else 'No result'
+                print(f"✗ Agent execution failed: {error}")
+                print(f"  Next run: {agent.next_scheduled_run}")
                 
-            except Exception as e:
-                print(f"✗ Error running scheduled agent {agent.name}: {e}")
-                import traceback
-                traceback.print_exc()
-    
-    asyncio.run(_run())
+        except Exception as e:
+            print(f"✗ Error in agent execution: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"  Next run: {agent.next_scheduled_run}")
+        
+    except Exception as e:
+        print(f"✗ Error in scheduled task: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+    finally:
+        db.close()

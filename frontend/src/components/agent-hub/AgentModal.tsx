@@ -20,7 +20,7 @@ interface AgentModalProps {
 
 export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const isEdit = !!agent
-  const [activeTab, setActiveTab] = useState<'config' | 'knowledge'>('config')
+  const [activeTab, setActiveTab] = useState<'config' | 'tools' | 'schedule' | 'knowledge'>('config')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const toast = useToast()
 
@@ -141,7 +141,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-card border border-border rounded-lg max-w-3xl w-full h-[85vh] flex flex-col">{/* Fixed height to prevent jumping */}
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <h2 className="text-xl font-bold text-foreground">
@@ -168,6 +168,28 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
               }`}
             >
               ⚙️ Configuration
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('tools')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'tools'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              🔧 Tools
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('schedule')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'schedule'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              🕐 Schedule
             </button>
             {isEdit && (
               <button
@@ -362,11 +384,31 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
             </div>
           </div>
 
-          {/* Tools */}
+          {/* Visibility */}
+          <Select
+            label="Visibility"
+            value={formData.visibility}
+            onChange={(val) =>
+              setFormData({
+                ...formData,
+                visibility: val as 'private' | 'team' | 'public',
+              })
+            }
+            options={[
+              { value: 'private', label: 'Private', description: 'Only you' },
+              { value: 'team', label: 'Team', description: 'Team members' },
+              { value: 'public', label: 'Public', description: 'Everyone in marketplace' },
+            ]}
+          />
+            </>
+          ) : activeTab === 'tools' ? (
+            <>
+          {/* Tools Tab */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-3">
-              Enabled Tools
-            </label>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Enabled Tools</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select which tools this agent can use when processing requests.
+            </p>
             <div className="grid grid-cols-2 gap-3">
               {AVAILABLE_TOOLS.map((tool) => (
                 <label
@@ -386,88 +428,99 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
                 </label>
               ))}
             </div>
+            {formData.enabled_tools.length > 0 && (
+              <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                <p className="text-sm text-foreground">
+                  <span className="font-medium">{formData.enabled_tools.length}</span> tool(s) enabled
+                </p>
+              </div>
+            )}
           </div>
-
-          {/* Visibility */}
-          <Select
-            label="Visibility"
-            value={formData.visibility}
-            onChange={(val) =>
-              setFormData({
-                ...formData,
-                visibility: val as 'private' | 'team' | 'public',
-              })
-            }
-            options={[
-              { value: 'private', label: 'Private', description: 'Only you' },
-              { value: 'team', label: 'Team', description: 'Team members' },
-              { value: 'public', label: 'Public', description: 'Everyone in marketplace' },
-            ]}
-          />
-
-          {/* Trigger Type */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Trigger Type
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, trigger: 'manual' })}
-                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
-                  formData.trigger === 'manual'
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border text-foreground hover:bg-accent'
-                }`}
-              >
-                Manual
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, trigger: 'chat' })}
-                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
-                  formData.trigger === 'chat'
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border text-foreground hover:bg-accent'
-                }`}
-              >
-                Chat
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, trigger: 'scheduled' })}
-                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
-                  formData.trigger === 'scheduled'
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border text-foreground hover:bg-accent'
-                }`}
-              >
-                Scheduled
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {formData.trigger === 'manual' && 'Triggered manually or via API'}
-              {formData.trigger === 'chat' && 'Triggered through chat interface'}
-              {formData.trigger === 'scheduled' && 'Runs automatically on a schedule'}
-            </p>
-          </div>
-
-          {/* Schedule Configuration */}
-          {formData.trigger === 'scheduled' && (
-            <CronSelector
-              value={formData.schedule}
-              onChange={(cron) => setFormData({ ...formData, schedule: cron })}
-            />
-          )}
             </>
-          ) : (
+          ) : activeTab === 'schedule' ? (
+            <>
+          {/* Schedule Tab */}
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Trigger Type</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Choose how this agent should be triggered.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, trigger: 'manual' })}
+                  className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                    formData.trigger === 'manual'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background border-border text-foreground hover:bg-accent'
+                  }`}
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ 
+                    ...formData, 
+                    trigger: 'scheduled',
+                    schedule: formData.schedule || '0 * * * *' // Default to "Every Hour"
+                  })}
+                  className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                    formData.trigger === 'scheduled'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background border-border text-foreground hover:bg-accent'
+                  }`}
+                >
+                  Scheduled
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {formData.trigger === 'manual' && '✓ Triggered manually or via API'}
+                {formData.trigger === 'scheduled' && '✓ Runs automatically on a schedule'}
+              </p>
+            </div>
+
+            {/* Schedule Configuration */}
+            {formData.trigger === 'scheduled' && (
+              <div className="space-y-4">
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-3">Schedule Configuration</h4>
+                  <CronSelector
+                    value={formData.schedule}
+                    onChange={(cron) => setFormData({ ...formData, schedule: cron })}
+                  />
+                </div>
+
+                {agent?.next_scheduled_run && (
+                  <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <p className="text-sm text-foreground">
+                      <span className="font-medium">Next Run:</span>{' '}
+                      {new Date(agent.next_scheduled_run).toLocaleString()}
+                    </p>
+                    {agent.last_scheduled_run && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Last Run: {new Date(agent.last_scheduled_run).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="text-xs text-muted-foreground space-y-1 p-3 bg-muted/50 rounded-lg">
+                  <p>ℹ️ All schedules are in UTC timezone</p>
+                  <p>ℹ️ Next run time is calculated automatically after saving</p>
+                </div>
+              </div>
+            )}
+          </div>
+            </>
+          ) : activeTab === 'knowledge' ? (
             /* Knowledge Base Tab */
             <KnowledgeBaseUpload agentId={agent?.id || ''} />
-          )}
+          ) : null}
         </form>
 
         {/* Footer */}
-        {activeTab === 'config' && (
+        {activeTab !== 'knowledge' && (
           <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3">
             <button
               type="button"

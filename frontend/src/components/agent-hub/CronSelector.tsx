@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock } from 'lucide-react'
+import { Select, SelectOption } from '@/components/ui/Select'
 
 interface CronSelectorProps {
   value?: string
@@ -24,14 +24,15 @@ const CRON_PRESETS: CronPreset[] = [
 
 export function CronSelector({ value = '', onChange, className = '' }: CronSelectorProps) {
   const [isCustom, setIsCustom] = useState(() => {
-    return value !== '' && !CRON_PRESETS.some(preset => preset.value === value)
+    if (!value) return false
+    return !CRON_PRESETS.some(preset => preset.value === value)
   })
   const [customValue, setCustomValue] = useState(value)
 
   const handlePresetChange = (presetValue: string) => {
     if (presetValue === 'custom') {
       setIsCustom(true)
-      onChange(customValue)
+      // Keep current customValue, don't clear it
     } else {
       setIsCustom(false)
       setCustomValue(presetValue)
@@ -45,35 +46,32 @@ export function CronSelector({ value = '', onChange, className = '' }: CronSelec
     onChange(newValue)
   }
 
-  const selectedPreset = CRON_PRESETS.find(p => p.value === value)?.value || 'custom'
+  // Determine selected value for dropdown
+  const selectedValue = isCustom ? 'custom' : (CRON_PRESETS.find(p => p.value === value)?.value || 'custom')
+
+  // Convert CRON_PRESETS to SelectOption format
+  const selectOptions: SelectOption[] = [
+    ...CRON_PRESETS.map(p => ({
+      value: p.value,
+      label: p.label,
+      description: p.description
+    })),
+    {
+      value: 'custom',
+      label: 'Custom...',
+      description: 'Enter your own cron expression'
+    }
+  ]
 
   return (
     <div className={`space-y-3 ${className}`}>
-      {/* Preset Selector */}
-      <div>
-        <label className="block text-sm font-medium text-foreground mb-2">
-          <Clock className="inline w-4 h-4 mr-1" />
-          Schedule Preset
-        </label>
-        <select
-          value={isCustom ? 'custom' : selectedPreset}
-          onChange={(e) => handlePresetChange(e.target.value)}
-          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-        >
-          {CRON_PRESETS.map((preset) => (
-            <option key={preset.value} value={preset.value}>
-              {preset.label}
-            </option>
-          ))}
-          <option value="custom">Custom...</option>
-        </select>
-        
-        {!isCustom && selectedPreset !== 'custom' && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {CRON_PRESETS.find(p => p.value === selectedPreset)?.description}
-          </p>
-        )}
-      </div>
+      {/* Preset Selector - Portal ensures it works everywhere */}
+      <Select
+        label="Schedule Preset"
+        value={selectedValue}
+        onChange={handlePresetChange}
+        options={selectOptions}
+      />
 
       {/* Custom Input */}
       {isCustom && (

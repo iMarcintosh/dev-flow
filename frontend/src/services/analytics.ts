@@ -88,3 +88,20 @@ export async function getAgentToolUsage(agentId: string, days: number = 30): Pro
     throw error
   }
 }
+
+/**
+ * Get total lifetime runs for an agent (for display on cards)
+ */
+export async function getAgentTotalRuns(agentId: string): Promise<number> {
+  try {
+    const { data } = await api.get(`/api/analytics/agents/${agentId}/total-runs`)
+    return data.total_runs || 0
+  } catch (error: any) {
+    // Return 0 if no analytics data yet
+    if (error.response?.status === 404) {
+      return 0
+    }
+    console.error('Failed to fetch agent total runs:', error)
+    return 0
+  }
+}

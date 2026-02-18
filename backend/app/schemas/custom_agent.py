@@ -102,7 +102,7 @@ class CustomAgentBase(BaseModel):
     tool_config: Dict[str, Any] = Field(default_factory=dict)
     
     # Scheduling
-    trigger: str = Field(default="manual", pattern="^(manual|chat|scheduled)$")
+    trigger: str = Field(default="manual", pattern="^(manual|scheduled)$")
     schedule: Optional[str] = None
     schedule_enabled: bool = Field(default=True)
     
@@ -149,7 +149,7 @@ class CustomAgentUpdate(BaseModel):
     tool_config: Optional[Dict[str, Any]] = None
     
     # Scheduling
-    trigger: Optional[str] = Field(None, pattern="^(manual|chat|scheduled)$")
+    trigger: Optional[str] = Field(None, pattern="^(manual|scheduled)$")
     schedule: Optional[str] = None
     schedule_enabled: Optional[bool] = None
     

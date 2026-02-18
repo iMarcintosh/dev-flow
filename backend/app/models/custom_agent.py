@@ -43,7 +43,6 @@ class CustomAgent(Base):
     next_scheduled_run = Column(DateTime, nullable=True)
     
     # Stats
-    run_count = Column(Integer, nullable=False, server_default='0')
     star_count = Column(Integer, nullable=False, server_default='0')  # For marketplace
     install_count = Column(Integer, nullable=False, server_default='0')  # For marketplace
     last_used_at = Column(DateTime, nullable=True)

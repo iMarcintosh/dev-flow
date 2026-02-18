@@ -18,3 +18,12 @@ async def get_db() -> AsyncSession:
             raise
         finally:
             await session.close()
+
+# Synchronous session for Celery tasks
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Create sync engine from async URL
+sync_database_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+sync_engine = create_engine(sync_database_url, echo=False)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)

@@ -179,7 +179,7 @@ class AnalyticsService:
         Args:
             db: Database session
             agent_id: Optional agent filter
-            user_id: Optional user filter
+            user_id: Optional user filter (for access control)
             days: Number of days to look back
             
         Returns:
@@ -191,8 +191,19 @@ class AnalyticsService:
         conditions = [AgentAnalytics.date >= start_date]
         if agent_id:
             conditions.append(AgentAnalytics.agent_id == agent_id)
-        if user_id:
-            conditions.append(AgentAnalytics.user_id == user_id)
+            
+            # Check agent visibility for access control
+            agent_result = await db.execute(
+                select(CustomAgent.visibility, CustomAgent.user_id).where(CustomAgent.id == agent_id)
+            )
+            agent_row = agent_result.first()
+            
+            if agent_row:
+                visibility, owner_id = agent_row
+                # For private agents, only show stats for the owner
+                if visibility == 'private' and user_id:
+                    conditions.append(AgentAnalytics.user_id == user_id)
+                # For public/team agents, aggregate all users (no user_id filter)
         
         # Aggregate query
         result = await db.execute(
@@ -202,6 +213,8 @@ class AnalyticsService:
                 func.sum(AgentAnalytics.failed_runs).label('failed_runs'),
                 func.avg(AgentAnalytics.avg_response_time).label('avg_response_time'),
                 func.sum(AgentAnalytics.total_tokens).label('total_tokens'),
+                func.sum(AgentAnalytics.prompt_tokens).label('prompt_tokens'),
+                func.sum(AgentAnalytics.completion_tokens).label('completion_tokens'),
                 func.sum(AgentAnalytics.tool_calls_count).label('tool_calls')
             ).where(and_(*conditions))
         )
@@ -215,6 +228,8 @@ class AnalyticsService:
             "success_rate": (row.successful_runs / row.total_runs * 100) if row.total_runs else 0,
             "avg_response_time": round(row.avg_response_time, 2) if row.avg_response_time else 0,
             "total_tokens": row.total_tokens or 0,
+            "prompt_tokens": row.prompt_tokens or 0,
+            "completion_tokens": row.completion_tokens or 0,
             "tool_calls": row.tool_calls or 0
         }
     

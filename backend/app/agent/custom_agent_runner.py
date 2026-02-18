@@ -134,7 +134,6 @@ async def run_custom_agent(
             success = True
         
         # Update usage stats
-        agent.run_count += 1
         from sqlalchemy.sql import func
         agent.last_used_at = func.now()
         await db.commit()
@@ -278,7 +277,6 @@ async def run_custom_agent_streaming(
                     yield content
         
         # Update usage stats
-        agent.run_count += 1
         from sqlalchemy.sql import func
         agent.last_used_at = func.now()
         await db.commit()

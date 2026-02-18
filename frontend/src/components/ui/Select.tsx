@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -15,6 +16,7 @@ interface SelectProps {
   placeholder?: string
   disabled?: boolean
   className?: string
+  forceUpward?: boolean  // Force dropdown to open upward
 }
 
 export function Select({
@@ -25,18 +27,31 @@ export function Select({
   placeholder = 'Select an option...',
   disabled = false,
   className = '',
+  forceUpward = false,
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [openUpward, setOpenUpward] = useState(false)
+  const [openUpward, setOpenUpward] = useState(forceUpward)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
   const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   const selectedOption = options.find((opt) => opt.value === value)
 
-  // Check if dropdown should open upward
+  // Calculate dropdown position
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
+      setDropdownPosition({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+      })
+
+      if (forceUpward) {
+        setOpenUpward(true)
+        return
+      }
+      
       const spaceBelow = window.innerHeight - rect.bottom
       const spaceAbove = rect.top
       const dropdownHeight = 320 // max-h-80 = 20rem = 320px
@@ -44,7 +59,7 @@ export function Select({
       // Open upward if not enough space below and more space above
       setOpenUpward(spaceBelow < dropdownHeight && spaceAbove > spaceBelow)
     }
-  }, [isOpen])
+  }, [isOpen, forceUpward])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -116,19 +131,28 @@ export function Select({
         />
       </button>
 
-      {/* Dropdown Menu */}
-      {isOpen && (
+      {/* Dropdown Menu - Rendered via Portal */}
+      {isOpen && createPortal(
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-[998]"
             onClick={() => setIsOpen(false)}
           />
 
-          {/* Options List */}
-          <div className={`absolute z-20 w-full bg-background border border-border rounded-lg shadow-xl max-h-80 overflow-y-auto ${
-            openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
-          }`}>
+          {/* Options List - Portal ensures it renders above everything */}
+          <div 
+            ref={dropdownRef}
+            className="fixed z-[999] bg-background border border-border rounded-lg shadow-xl max-h-80 overflow-y-auto"
+            style={{
+              left: `${dropdownPosition.left}px`,
+              width: `${dropdownPosition.width}px`,
+              ...(openUpward 
+                ? { bottom: `${window.innerHeight - dropdownPosition.top + 8}px` }
+                : { top: `${dropdownPosition.top + 48}px` }
+              )
+            }}
+          >
             {options.map((option) => (
               <button
                 key={option.value}
@@ -160,7 +184,8 @@ export function Select({
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )

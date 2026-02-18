@@ -4,8 +4,11 @@ API endpoints for Custom Agent management.
 
 from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.api.routes.auth import get_current_user
@@ -228,8 +231,10 @@ async def update_agent(
             agent_data=agent_data,
         )
         
-        # Update schedule if changed
-        if agent_data.schedule is not None or agent_data.schedule_enabled is not None:
+        # Update schedule if changed (including trigger changes)
+        if (agent_data.schedule is not None or 
+            agent_data.schedule_enabled is not None or 
+            agent_data.trigger is not None):
             from app.services.scheduler import update_agent_schedule
             
             background_tasks.add_task(
@@ -479,3 +484,71 @@ async def update_schedule(
     await db.refresh(agent)
     
     return agent
+
+
+# Scheduled Run Result Schema
+class ScheduledRunResult(BaseModel):
+    id: UUID
+    agent_id: UUID
+    status: str
+    input_text: Optional[str]
+    response: Optional[str]
+    error: Optional[str]
+    response_time: Optional[float]
+    tools_used: Optional[int]
+    executed_at: datetime
+
+
+@router.get("/{agent_id}/scheduled-runs", response_model=List[ScheduledRunResult])
+async def get_scheduled_runs(
+    agent_id: UUID,
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get scheduled run history for an agent.
+    
+    Returns recent scheduled executions with results.
+    """
+    # Verify agent access
+    result = await db.execute(
+        select(CustomAgent).where(CustomAgent.id == agent_id)
+    )
+    agent = result.scalar_one_or_none()
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Check access (owner or team member for team agents)
+    if agent.visibility == "private" and agent.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Fetch runs
+    query = text("""
+        SELECT id, agent_id, status, input_text, response, error, 
+               response_time, tools_used, executed_at
+        FROM scheduled_agent_runs
+        WHERE agent_id = :agent_id
+        ORDER BY executed_at DESC
+        LIMIT :limit
+    """)
+    
+    result = await db.execute(query, {"agent_id": str(agent_id), "limit": limit})
+    rows = result.fetchall()
+    
+    runs = []
+    for row in rows:
+        runs.append(ScheduledRunResult(
+            id=row[0],
+            agent_id=row[1],
+            status=row[2],
+            input_text=row[3],
+            response=row[4],
+            error=row[5],
+            response_time=row[6],
+            tools_used=row[7],
+            executed_at=row[8],
+        ))
+    
+    return runs
