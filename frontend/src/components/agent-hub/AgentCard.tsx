@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Edit2, Trash2, MessageSquare, Star, Download, Lock, Users, Globe } from 'lucide-react'
+import { Edit2, Trash2, MessageSquare, Star, Download, Lock, Users, Globe, Clock } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent } from '@/types/custom-agent'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -87,8 +87,8 @@ export function AgentCard({
         </div>
       </div>
 
-      {/* Model & Visibility */}
-      <div className="flex items-center gap-3 mb-4">
+      {/* Model & Visibility & Schedule */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-background px-2 py-1 rounded">
           <span className="font-mono">{agent.model_name.split('-').slice(0, 2).join('-')}</span>
         </div>
@@ -96,6 +96,12 @@ export function AgentCard({
           {visibilityIcon}
           <span className="capitalize">{agent.visibility}</span>
         </div>
+        {agent.trigger === 'scheduled' && agent.schedule && (
+          <div className="flex items-center gap-1.5 text-xs text-primary bg-primary/10 px-2 py-1 rounded">
+            <Clock className="w-3 h-3" />
+            <span>Scheduled</span>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
