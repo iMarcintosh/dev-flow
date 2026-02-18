@@ -15,6 +15,9 @@ DevFlow transforms your development workflow with Kanban boards, custom AI agent
 
 ### 🤖 Custom AI Agents
 - **Agent Hub** - Create and manage custom AI agents with specific roles
+  - **Modern Card UI** - Icon-based stats, elegant diagonal shine hover effect
+  - **Scheduled Agents** - Run agents automatically on cron schedules (hourly, daily, weekly, custom)
+  - **Agent Details Modal** - Comprehensive analytics, tool usage, and execution history
 - **Model Selection** - Choose from Claude, GPT-4, and other LLMs
 - **Tool Integration** - Equip agents with powerful capabilities:
   - 📋 **Board Management** - Create and update tasks
@@ -51,12 +54,15 @@ DevFlow transforms your development workflow with Kanban boards, custom AI agent
 - **Team Agents** - Share agents across team members
 
 ### 📊 Usage Analytics
-- **Automatic Tracking** - Every agent run is logged
+- **Automatic Tracking** - Every agent run is logged with detailed metrics
 - **Performance Metrics** - Response times (min/max/avg), success rates
-- **Tool Statistics** - Track which tools are used most
+- **Token Tracking** - Accurate token counting with tiktoken (prompt + completion tokens)
+- **Tool Statistics** - Track which tools are used most with success rates
+- **Scheduled Run History** - View complete execution logs for scheduled agents
 - **Daily Aggregation** - Efficient time-series data
 - **Per-Agent & Global** - Analyze individual agents or overall usage
-- **REST API** - 5 endpoints for querying analytics
+- **Visibility-Based Access** - Private agents show only owner data, public/team aggregate all users
+- **REST API** - Comprehensive endpoints for querying analytics and execution history
 
 ### 🔐 Security & API Keys
 - **Per-User API Keys** - Store your own Anthropic, OpenAI, OpenRouter keys
@@ -609,3 +615,30 @@ Proprietary - All rights reserved
 ---
 
 **Made with ❤️ using AI assistance**
+
+---
+
+## 🎨 Recent Updates
+
+### Agent Hub UI Improvements (2026-02-18)
+- **Modern Card Design** - Icon-based statistics without text labels for cleaner look
+- **Diagonal Shine Effect** - Elegant hover animation with 400ms delay and soft blur
+- **Fixed Layout** - Consistent 420px card height with flex layout
+- **Enhanced UX** - Action buttons in top-right, chat button always at bottom
+- **Token Tracking** - Accurate token counting for scheduled agents using tiktoken
+- **Scheduled Runs UI** - Complete execution history with expandable details
+- **Better Analytics** - Visibility-based access control and detailed breakdowns
+
+### Scheduled Agents (2026-02-17)
+- **Cron Scheduling** - Run agents automatically on custom schedules
+- **Preset Schedules** - Hourly, daily, weekly, monthly, weekdays presets
+- **Next Run Preview** - See when agent will execute next
+- **Manual Trigger** - Run scheduled agents on-demand
+- **Execution History** - Track all scheduled runs with status and logs
+
+### Custom Agent Tools (2026-02-16)
+- **Knowledge Base** - RAG with local embeddings, no OpenAI required
+- **Code Execution** - Python, JavaScript, Bash in secure Docker containers
+- **Web Search** - Real-time web search for up-to-date information
+- **Board Integration** - Create and manage tasks from agents
+
