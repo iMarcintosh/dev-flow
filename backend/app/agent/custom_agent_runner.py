@@ -60,8 +60,9 @@ async def run_custom_agent(
         max_tokens=agent.max_tokens,
     )
     
-    # Apply additional parameters
-    if hasattr(llm, 'top_p'):
+    # Apply additional parameters (only for compatible providers)
+    # OpenAI doesn't support both temperature AND top_p
+    if hasattr(llm, 'top_p') and not agent.model_name.startswith('gpt-'):
         llm.top_p = agent.top_p
     
     # Bind tools if enabled
@@ -210,8 +211,9 @@ async def run_custom_agent_streaming(
         max_tokens=agent.max_tokens,
     )
     
-    # Apply additional parameters
-    if hasattr(llm, 'top_p'):
+    # Apply additional parameters (only for compatible providers)
+    # OpenAI doesn't support both temperature AND top_p
+    if hasattr(llm, 'top_p') and not agent.model_name.startswith('gpt-'):
         llm.top_p = agent.top_p
     
     # Bind tools if enabled
