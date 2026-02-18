@@ -10,6 +10,7 @@ import KnowledgeBaseUpload from './KnowledgeBaseUpload'
 import { useToast } from '@/hooks/useToast'
 import { getErrorMessage, getValidationErrors } from '@/utils/errorHandler'
 import { Select } from '@/components/ui/Select'
+import { CronSelector } from './CronSelector'
 
 interface AgentModalProps {
   agent?: CustomAgent | null
@@ -34,6 +35,9 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     max_tokens: agent?.max_tokens,
     top_p: agent?.top_p,
     enabled_tools: agent?.enabled_tools || ([] as string[]),
+    trigger: agent?.trigger || 'manual',
+    schedule: agent?.schedule || '',
+    schedule_enabled: agent?.schedule_enabled ?? true,
   })
 
   // Fetch available models
@@ -400,6 +404,61 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
               { value: 'public', label: 'Public', description: 'Everyone in marketplace' },
             ]}
           />
+
+          {/* Trigger Type */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Trigger Type
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, trigger: 'manual' })}
+                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                  formData.trigger === 'manual'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-border text-foreground hover:bg-accent'
+                }`}
+              >
+                Manual
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, trigger: 'chat' })}
+                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                  formData.trigger === 'chat'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-border text-foreground hover:bg-accent'
+                }`}
+              >
+                Chat
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, trigger: 'scheduled' })}
+                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                  formData.trigger === 'scheduled'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-border text-foreground hover:bg-accent'
+                }`}
+              >
+                Scheduled
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {formData.trigger === 'manual' && 'Triggered manually or via API'}
+              {formData.trigger === 'chat' && 'Triggered through chat interface'}
+              {formData.trigger === 'scheduled' && 'Runs automatically on a schedule'}
+            </p>
+          </div>
+
+          {/* Schedule Configuration */}
+          {formData.trigger === 'scheduled' && (
+            <CronSelector
+              value={formData.schedule}
+              onChange={(cron) => setFormData({ ...formData, schedule: cron })}
+            />
+          )}
             </>
           ) : (
             /* Knowledge Base Tab */
