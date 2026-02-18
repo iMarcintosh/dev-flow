@@ -36,29 +36,26 @@ class ChatAgent(BaseDevFlowAgent):
     
     def __init__(self):
         super().__init__()
-        self._llm = None
     
-    def _get_llm(self):
-        """Lazy-load LLM based on provider."""
-        if self._llm is None:
+    async def _get_llm(self, user_id: str):
+        """Get LLM based on user's preferred model for chat agent."""
+        from app.agent.model_resolver import get_user_llm
+        
+        try:
+            llm = await get_user_llm(user_id, agent_type="chat_agent")
+            return llm
+        except Exception as e:
+            logger.warning(f"Failed to get user LLM: {e}, using fallback")
+            # Fallback to default
             if settings.anthropic_api_key:
                 from langchain_anthropic import ChatAnthropic
-                self._llm = ChatAnthropic(
+                return ChatAnthropic(
                     model="claude-3-haiku-20240307",
                     anthropic_api_key=settings.anthropic_api_key,
                     temperature=0.7,
                     max_tokens=2048
                 )
-            elif settings.openai_api_key:
-                from langchain_openai import ChatOpenAI
-                self._llm = ChatOpenAI(
-                    model="gpt-4",
-                    openai_api_key=settings.openai_api_key,
-                    temperature=0.7
-                )
-            else:
-                self._llm = None
-        return self._llm
+            return None
     
     async def run(self, input: AgentInput, run_id: str) -> AgentResult:
         """Process chat message and generate response."""
@@ -91,7 +88,7 @@ class ChatAgent(BaseDevFlowAgent):
                 # 5. Generate response (simple rule-based for now, ready for LLM)
                 await self.log(run_id, "Generating response...")
                 response = await self._generate_response(
-                    user_message, context, relevant_items
+                    user_message, context, relevant_items, input.user_id
                 )
                 
                 # 6. Save messages to DB
@@ -178,13 +175,13 @@ class ChatAgent(BaseDevFlowAgent):
         return "\n".join(parts)
     
     async def _generate_response(
-        self, message: str, context: str, items: List
+        self, message: str, context: str, items: List, user_id: str
     ) -> str:
         """
         Generate response based on message and context.
         Uses LLM if available, otherwise falls back to rule-based logic.
         """
-        llm = self._get_llm()
+        llm = await self._get_llm(user_id)
         
         if llm:
             # Use LLM for intelligent responses
