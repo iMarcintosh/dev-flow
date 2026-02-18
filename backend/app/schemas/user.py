@@ -23,6 +23,7 @@ class UserResponse(UserBase):
     is_verified: bool
     is_active: bool
     avatar_url: Optional[str] = None
+    preferred_models: Optional[dict] = None
     created_at: datetime
 
     class Config:

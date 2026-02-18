@@ -167,6 +167,40 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
 
 
+@router.patch("/me/preferences")
+async def update_preferences(
+    preferences: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update user preferences (e.g., preferred models).
+    
+    Body example:
+    {
+        "task_creator": "claude-3-5-sonnet-20241022",
+        "chat_agent": "claude-3-haiku-20240307"
+    }
+    """
+    # Validate that keys are agent types
+    valid_agent_types = {"task_creator", "chat_agent", "daily_summary"}
+    if not all(key in valid_agent_types for key in preferences.keys()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid agent type. Must be one of: {valid_agent_types}"
+        )
+    
+    # Update preferred_models
+    current_user.preferred_models = preferences
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return {
+        "success": True,
+        "preferred_models": current_user.preferred_models
+    }
+
+
 @router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie(key="refresh_token")

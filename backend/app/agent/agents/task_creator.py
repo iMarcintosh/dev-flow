@@ -23,30 +23,39 @@ class TaskCreatorAgent(BaseDevFlowAgent):
     
     def __init__(self):
         super().__init__()
-        self._llm = None
+        # LLM will be created per-run based on user preferences
     
-    def _get_llm(self):
-        """Lazy-load LLM based on provider."""
-        if self._llm is None:
+    async def _get_llm(self, user_id: str):
+        """Get LLM instance based on user's preferred model."""
+        from app.agent.model_resolver import get_user_llm
+        
+        try:
+            llm = await get_user_llm(
+                user_id=user_id,
+                agent_type="task_creator",
+                temperature=0.7,
+                max_tokens=4096
+            )
+            return llm
+        except Exception as e:
+            logger.error(f"Failed to get user LLM: {e}, using fallback")
+            # Fallback to hardcoded Haiku
             if settings.anthropic_api_key:
                 from langchain_anthropic import ChatAnthropic
-                self._llm = ChatAnthropic(
-                    model="claude-3-haiku-20240307",  # Claude 3 Haiku (fast & available)
+                return ChatAnthropic(
+                    model="claude-3-haiku-20240307",
                     anthropic_api_key=settings.anthropic_api_key,
                     temperature=0.7,
                     max_tokens=4096
                 )
             elif settings.openai_api_key:
                 from langchain_openai import ChatOpenAI
-                self._llm = ChatOpenAI(
+                return ChatOpenAI(
                     model="gpt-4",
                     openai_api_key=settings.openai_api_key,
                     temperature=0.7
                 )
-            else:
-                # Fallback to rule-based
-                self._llm = None
-        return self._llm
+            return None
     
     async def run(self, input_data: AgentInput, run_id: str) -> AgentResult:
         """Execute the task creation workflow."""
@@ -68,11 +77,11 @@ class TaskCreatorAgent(BaseDevFlowAgent):
         try:
             # Step 1: Classify
             await self.log(run_id, "Step 1/5: Classifying input type...", "info")
-            classification = await self._classify(user_text)
+            classification = await self._classify(user_text, input_data.user_id)
             
             # Step 2: Enrich
             await self.log(run_id, "Step 2/5: Enriching with metadata...", "info")
-            enriched = await self._enrich(user_text, classification)
+            enriched = await self._enrich(user_text, classification, input_data.user_id)
             
             # Step 3: Break down
             await self.log(run_id, "Step 3/5: Breaking down into tasks...", "info")
@@ -108,9 +117,9 @@ class TaskCreatorAgent(BaseDevFlowAgent):
                 error=str(e)
             )
     
-    async def _classify(self, text: str) -> Dict[str, Any]:
+    async def _classify(self, text: str, user_id: str) -> Dict[str, Any]:
         """Classify the input type using LLM or fallback to rules."""
-        llm = self._get_llm()
+        llm = await self._get_llm(user_id)
         
         if llm:
             # Use LLM for intelligent classification
@@ -160,9 +169,9 @@ Multiple: true if text describes several distinct items."""
             else:
                 return {"type": "task", "multiple": "," in text or "\n" in text, "confidence": 50, "reasoning": "Default"}
     
-    async def _enrich(self, text: str, classification: Dict) -> Dict[str, Any]:
+    async def _enrich(self, text: str, classification: Dict, user_id: str) -> Dict[str, Any]:
         """Enrich with proper structure using LLM or fallback."""
-        llm = self._get_llm()
+        llm = await self._get_llm(user_id)
         
         if llm:
             # Use LLM for intelligent enrichment

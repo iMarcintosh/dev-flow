@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
-from app.api.routes import auth, projects, items, agents, chat
+from app.api.routes import auth, projects, items, agents, chat, models
 import logging
 
 # Import agents to trigger registration
@@ -46,6 +46,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(items.router, prefix="/api/items", tags=["items"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(models.router)
 app.include_router(chat.router)
 
 
