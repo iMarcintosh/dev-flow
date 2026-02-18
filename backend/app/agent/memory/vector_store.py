@@ -1,0 +1,138 @@
+"""Vector store for semantic search using pgvector."""
+
+from typing import List, Optional
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from pgvector.sqlalchemy import Vector
+
+from app.models.item import Item
+from app.services.embedding_service import embedding_service
+
+
+class VectorStore:
+    """Wrapper for pgvector-based semantic search."""
+    
+    async def index_item(self, db: AsyncSession, item_id: str):
+        """
+        Generate and store embedding for an item.
+        
+        Args:
+            db: Database session
+            item_id: UUID of the item to index
+        """
+        from uuid import UUID
+        
+        # Convert to UUID if string
+        if isinstance(item_id, str):
+            item_id = UUID(item_id)
+        
+        # Get the item
+        stmt = select(Item).where(Item.id == item_id)
+        result = await db.execute(stmt)
+        item = result.scalar_one_or_none()
+        
+        if not item:
+            return
+        
+        # Build text to embed: type + title + description + acceptance_criteria
+        parts = [
+            f"{item.type.value.upper()}: {item.title}",
+        ]
+        if item.description:
+            parts.append(item.description)
+        if item.acceptance_criteria:
+            parts.append(f"Acceptance Criteria: {item.acceptance_criteria}")
+        
+        text = "\n".join(parts)
+        
+        # Generate embedding
+        embedding = await embedding_service.embed_text(text)
+        
+        # Update item
+        item.embedding = embedding
+        await db.commit()
+    
+    async def similarity_search(
+        self,
+        db: AsyncSession,
+        query: str,
+        project_id: str,
+        top_k: int = 10
+    ) -> List[Item]:
+        """
+        Find items most similar to the query using cosine similarity.
+        
+        Args:
+            db: Database session
+            query: Search query text
+            project_id: Filter to specific project
+            top_k: Number of results to return
+            
+        Returns:
+            List of most relevant items
+        """
+        # Generate query embedding
+        query_embedding = await embedding_service.embed_text(query)
+        
+        # pgvector cosine similarity search
+        # <=> operator computes cosine distance (lower is better)
+        stmt = (
+            select(Item)
+            .where(Item.project_id == project_id)
+            .where(Item.embedding.isnot(None))
+            .order_by(Item.embedding.cosine_distance(query_embedding))
+            .limit(top_k)
+        )
+        
+        result = await db.execute(stmt)
+        items = result.scalars().all()
+        
+        return list(items)
+    
+    async def get_project_stats(
+        self,
+        db: AsyncSession,
+        project_id: str
+    ) -> dict:
+        """Get statistics about items in a project."""
+        from uuid import UUID
+        from sqlalchemy import func
+        from app.models.item import Item
+        
+        # Convert to UUID if string
+        if isinstance(project_id, str):
+            project_id = UUID(project_id)
+        
+        # Get all items for this project
+        stmt = select(Item).where(Item.project_id == project_id)
+        result = await db.execute(stmt)
+        items = result.scalars().all()
+        
+        # Count by status
+        status_counts = {}
+        for item in items:
+            status = item.status.value
+            status_counts[status] = status_counts.get(status, 0) + 1
+        
+        # Count by type
+        type_counts = {}
+        for item in items:
+            item_type = item.type.value
+            type_counts[item_type] = type_counts.get(item_type, 0) + 1
+        
+        # Count by priority
+        priority_counts = {}
+        for item in items:
+            priority = item.priority.value
+            priority_counts[priority] = priority_counts.get(priority, 0) + 1
+        
+        return {
+            "total_items": len(items),
+            "by_status": status_counts,
+            "by_type": type_counts,
+            "by_priority": priority_counts,
+        }
+
+
+# Singleton instance
+vector_store = VectorStore()

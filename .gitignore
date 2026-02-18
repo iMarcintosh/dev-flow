@@ -1,0 +1,16 @@
+.env
+node_modules/
+dist/
+build/
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+.DS_Store
+.vscode/
+.idea/
+*.log
+celerybeat-schedule
