@@ -44,37 +44,94 @@ class ModelInfo:
 class ModelDiscoveryService:
     """Service for discovering available models from various providers."""
     
-    # Hardcoded fallback lists (updated periodically from official docs)
+    # Hardcoded fallback lists (updated Feb 2026 from official docs)
     ANTHROPIC_MODELS = [
         ModelInfo(
-            id="claude-3-5-sonnet-20241022",
-            name="Claude 3.5 Sonnet",
-            provider="anthropic",
-            description="Most capable model, best for complex tasks and coding",
-            context_window=200000,
-            cost_tier="high"
-        ),
-        ModelInfo(
-            id="claude-3-5-sonnet-20240620",
-            name="Claude 3.5 Sonnet (June 2024)",
-            provider="anthropic",
-            description="Previous version of Claude 3.5 Sonnet",
-            context_window=200000,
-            cost_tier="high"
-        ),
-        ModelInfo(
-            id="claude-3-opus-20240229",
-            name="Claude 3 Opus",
+            id="claude-opus-4-6",
+            name="Claude Opus 4.6",
             provider="anthropic",
             description="Most powerful model for highly complex tasks",
             context_window=200000,
             cost_tier="highest"
         ),
         ModelInfo(
-            id="claude-3-sonnet-20240229",
-            name="Claude 3 Sonnet",
+            id="claude-sonnet-4-6",
+            name="Claude Sonnet 4.6",
             provider="anthropic",
-            description="Balanced performance and speed",
+            description="Best balance of intelligence and speed",
+            context_window=200000,
+            cost_tier="high"
+        ),
+        ModelInfo(
+            id="claude-haiku-4-5",
+            name="Claude Haiku 4.5",
+            provider="anthropic",
+            description="Fastest model for simple tasks",
+            context_window=200000,
+            cost_tier="low"
+        ),
+        ModelInfo(
+            id="claude-sonnet-4-5",
+            name="Claude Sonnet 4.5",
+            provider="anthropic",
+            description="Previous version of Sonnet",
+            context_window=200000,
+            cost_tier="high"
+        ),
+        ModelInfo(
+            id="claude-opus-4-5",
+            name="Claude Opus 4.5",
+            provider="anthropic",
+            description="Previous version of Opus",
+            context_window=200000,
+            cost_tier="highest"
+        ),
+        ModelInfo(
+            id="claude-opus-4-1",
+            name="Claude Opus 4.1",
+            provider="anthropic",
+            description="Older Opus version",
+            context_window=200000,
+            cost_tier="highest"
+        ),
+        ModelInfo(
+            id="claude-sonnet-4-0",
+            name="Claude Sonnet 4.0",
+            provider="anthropic",
+            description="Older Sonnet version",
+            context_window=200000,
+            cost_tier="high"
+        ),
+        ModelInfo(
+            id="claude-3-7-sonnet-latest",
+            name="Claude 3.7 Sonnet (Latest)",
+            provider="anthropic",
+            description="Latest Claude 3.7 model",
+            context_window=200000,
+            cost_tier="high"
+        ),
+        ModelInfo(
+            id="claude-opus-4-0",
+            name="Claude Opus 4.0",
+            provider="anthropic",
+            description="First Claude 4 Opus",
+            context_window=200000,
+            cost_tier="highest"
+        ),
+        # Legacy models (deprecated but still available)
+        ModelInfo(
+            id="claude-3-opus-20240229",
+            name="Claude 3 Opus (Legacy)",
+            provider="anthropic",
+            description="Legacy Claude 3 Opus",
+            context_window=200000,
+            cost_tier="highest"
+        ),
+        ModelInfo(
+            id="claude-3-sonnet-20240229",
+            name="Claude 3 Sonnet (Legacy)",
+            provider="anthropic",
+            description="Legacy Claude 3 Sonnet",
             context_window=200000,
             cost_tier="medium"
         ),
