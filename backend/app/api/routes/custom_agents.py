@@ -102,10 +102,6 @@ async def create_agent(
     
     Can be created from scratch or from a template.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"Creating agent with data: {agent_data.model_dump()}")
-    
     try:
         # Validate configuration
         await custom_agent_service.validate_agent_config(agent_data)
