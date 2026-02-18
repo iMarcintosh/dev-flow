@@ -121,7 +121,7 @@ export function Select({
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-10 backdrop-blur-[2px]"
+            className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           />
 

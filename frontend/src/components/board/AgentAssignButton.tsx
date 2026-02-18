@@ -82,8 +82,12 @@ export function AgentAssignButton({ item, projectId }: AgentAssignButtonProps) {
       {isOpen && (
         <>
           <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsOpen(false)
+            }}
+            onMouseMove={(e) => e.stopPropagation()}
           />
           <div className="absolute top-full left-0 mt-1 w-64 bg-card border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
             <div className="p-2 border-b border-border">
