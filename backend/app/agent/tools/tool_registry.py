@@ -221,6 +221,8 @@ def bind_tools_to_llm(
     Returns:
         LLM with tools bound (or original LLM if no tools or binding not supported)
     """
+    from app.agent.tools.code_execution_tool import code_execution_tool
+    
     tools = []
     
     for tool_name in tool_names:
@@ -231,7 +233,10 @@ def bind_tools_to_llm(
         elif tool_name == "web_search":
             tools.append(create_dummy_search_tool())
         
-        # TODO: Add other tools (code_execution, knowledge_base, etc.)
+        elif tool_name == "code_execution":
+            tools.append(code_execution_tool)
+        
+        # TODO: Add other tools (knowledge_base, etc.)
     
     if not tools:
         return llm
