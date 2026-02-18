@@ -5,7 +5,7 @@ Manages available tools that custom agents can use.
 """
 
 from typing import Dict, List, Optional, Any, Callable
-from langchain.tools import Tool
+from langchain.tools import Tool, BaseTool
 from langchain_core.language_models import BaseChatModel
 
 
