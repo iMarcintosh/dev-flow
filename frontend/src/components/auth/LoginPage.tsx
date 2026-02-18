@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { LoginCredentials } from '@/types'
+import logoLarge from '@/assets/images/logos/devflow-logo-large.png'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -35,12 +36,25 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">DevFlow</h1>
+        {/* Logo with glow */}
+        <div className="text-center mb-8 relative">
+          <div className="relative inline-block">
+            {/* Animated glow effect */}
+            <div className="absolute inset-0 blur-3xl bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 animate-glow-pulse" />
+            <img 
+              src={logoLarge} 
+              alt="DevFlow Logo" 
+              className="relative w-64 h-auto mx-auto mb-4 drop-shadow-2xl"
+            />
+          </div>
           <p className="text-muted-foreground">Sign in to your account</p>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-8">
+        {/* Login card with glow */}
+        <div className="relative">
+          {/* Card glow effect */}
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-purple-600 rounded-lg blur opacity-20 animate-subtle-glow" />
+          <div className="relative bg-card border border-border rounded-lg p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
@@ -81,9 +95,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              className="relative w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-4 rounded-lg transition-all disabled:opacity-50 group overflow-hidden"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {/* Button glow on hover */}
+              <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity blur-xl" />
+              <span className="relative">{loading ? 'Signing in...' : 'Sign In'}</span>
             </button>
           </form>
 
@@ -94,6 +110,7 @@ export default function LoginPage() {
                 Sign up
               </a>
             </p>
+          </div>
           </div>
         </div>
       </div>

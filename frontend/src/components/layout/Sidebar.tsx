@@ -1,6 +1,7 @@
 import { Link, useMatchRoute } from '@tanstack/react-router'
 import { LayoutDashboard, Cpu, Settings, LogOut } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import logoHorizontal from '@/assets/images/logos/devflow-logo-horizontal.png'
 
 export function Sidebar() {
   const matchRoute = useMatchRoute()
@@ -19,11 +20,15 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col border-r border-border bg-card">
-      {/* Logo */}
-      <div className="flex h-16 items-center border-b border-border px-6">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-          DevFlow
-        </h1>
+      {/* Logo with subtle glow */}
+      <div className="relative flex h-16 items-center border-b border-border px-4">
+        {/* Subtle glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 to-purple-500/10 blur-xl" />
+        <img 
+          src={logoHorizontal} 
+          alt="DevFlow" 
+          className="relative h-8 w-auto drop-shadow-lg"
+        />
       </div>
 
       {/* Navigation */}
@@ -37,15 +42,19 @@ export function Sidebar() {
               key={item.name}
               to={item.href}
               className={`
-                group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
+                group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all
                 ${active
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-primary/10 text-primary shadow-lg shadow-primary/20'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }
               `}
             >
-              <Icon className={`h-5 w-5 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
-              {item.name}
+              {/* Active item glow */}
+              {active && (
+                <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 to-purple-500/20 rounded-lg blur-sm" />
+              )}
+              <Icon className={`relative h-5 w-5 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
+              <span className="relative">{item.name}</span>
             </Link>
           )
         })}
