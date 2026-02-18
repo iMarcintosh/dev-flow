@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTeam, useAddTeamMember, useRemoveTeamMember, useUpdateMemberRole } from '@/services/queries'
 import { X, Loader2, Users, Mail, Crown, Shield, User as UserIcon, Trash2 } from 'lucide-react'
 import type { Team } from '@/services/teams'
+import { Select } from '@/components/ui/Select'
 
 interface TeamDetailModalProps {
   team: Team
@@ -119,14 +120,15 @@ export default function TeamDetailModal({ team, onClose }: TeamDetailModalProps)
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
-                <select
+                <Select
                   value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as 'member' | 'admin')}
-                  className="px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
+                  onChange={(val) => setSelectedRole(val as 'member' | 'admin')}
+                  options={[
+                    { value: 'member', label: 'Member' },
+                    { value: 'admin', label: 'Admin' },
+                  ]}
+                  className="w-32"
+                />
                 <button
                   type="submit"
                   disabled={addMemberMutation.isPending || !email.trim()}
@@ -176,15 +178,16 @@ export default function TeamDetailModal({ team, onClose }: TeamDetailModalProps)
                     <div className="flex items-center gap-2">
                       {member.role !== 'owner' && (
                         <>
-                          <select
+                          <Select
                             value={member.role}
-                            onChange={(e) => handleUpdateRole(member.user_id, e.target.value as 'member' | 'admin')}
-                            className="text-sm px-2 py-1 bg-background border border-border rounded text-foreground"
+                            onChange={(val) => handleUpdateRole(member.user_id, val as 'member' | 'admin')}
+                            options={[
+                              { value: 'member', label: 'Member' },
+                              { value: 'admin', label: 'Admin' },
+                            ]}
+                            className="w-32"
                             disabled={updateRoleMutation.isPending}
-                          >
-                            <option value="member">Member</option>
-                            <option value="admin">Admin</option>
-                          </select>
+                          />
                           <button
                             onClick={() => handleRemoveMember(member.user_id)}
                             disabled={removeMemberMutation.isPending}

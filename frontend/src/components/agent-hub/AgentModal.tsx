@@ -9,6 +9,7 @@ import ModelSelector from '@/components/settings/ModelSelector'
 import KnowledgeBaseUpload from './KnowledgeBaseUpload'
 import { useToast } from '@/hooks/useToast'
 import { getErrorMessage, getValidationErrors } from '@/utils/errorHandler'
+import { Select } from '@/components/ui/Select'
 
 interface AgentModalProps {
   agent?: CustomAgent | null
@@ -384,23 +385,21 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
           </div>
 
           {/* Visibility */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Visibility</label>
-            <select
-              value={formData.visibility}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  visibility: e.target.value as 'private' | 'team' | 'public',
-                })
-              }
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            >
-              <option value="private">Private (Only you)</option>
-              <option value="team">Team (Team members)</option>
-              <option value="public">Public (Marketplace)</option>
-            </select>
-          </div>
+          <Select
+            label="Visibility"
+            value={formData.visibility}
+            onChange={(val) =>
+              setFormData({
+                ...formData,
+                visibility: val as 'private' | 'team' | 'public',
+              })
+            }
+            options={[
+              { value: 'private', label: 'Private', description: 'Only you' },
+              { value: 'team', label: 'Team', description: 'Team members' },
+              { value: 'public', label: 'Public', description: 'Everyone in marketplace' },
+            ]}
+          />
             </>
           ) : (
             /* Knowledge Base Tab */

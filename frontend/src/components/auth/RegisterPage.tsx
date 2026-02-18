@@ -53,7 +53,7 @@ export default function RegisterPage() {
             <img 
               src={logoLarge} 
               alt="DevFlow Logo" 
-              className="relative w-80 h-auto mx-auto mb-1 drop-shadow-2xl"
+              className="relative w-64 h-auto mx-auto mb-1 drop-shadow-2xl"
             />
           </div>
           <p className="text-muted-foreground text-sm mb-2">Create your account</p>

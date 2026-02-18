@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Item, ItemType, ItemPriority } from '@/types'
 import { useUpdateItem, useDeleteItem } from '@/services/queries'
 import { X, Trash2, Save } from 'lucide-react'
+import { Select } from '@/components/ui/Select'
 
 interface ItemDetailModalProps {
   item: Item
@@ -73,34 +74,30 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
 
           {/* Type & Priority */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Type</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as ItemType)}
-                className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-              >
-                <option value="task">Task</option>
-                <option value="bug">Bug</option>
-                <option value="story">Story</option>
-                <option value="epic">Epic</option>
-                <option value="spike">Spike</option>
-              </select>
-            </div>
+            <Select
+              label="Type"
+              value={type}
+              onChange={(val) => setType(val as ItemType)}
+              options={[
+                { value: 'task', label: 'Task' },
+                { value: 'bug', label: 'Bug' },
+                { value: 'story', label: 'Story' },
+                { value: 'epic', label: 'Epic' },
+                { value: 'spike', label: 'Spike' },
+              ]}
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Priority</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as ItemPriority)}
-                className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
-            </div>
+            <Select
+              label="Priority"
+              value={priority}
+              onChange={(val) => setPriority(val as ItemPriority)}
+              options={[
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+                { value: 'critical', label: 'Critical' },
+              ]}
+            />
           </div>
 
           {/* Description */}

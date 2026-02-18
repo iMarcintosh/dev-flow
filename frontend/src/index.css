@@ -52,37 +52,63 @@
   50% { opacity: 1; }
 }
 
+@keyframes gentle-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .stars-small,
 .stars-medium,
-.stars-large {
+.stars-large-purple,
+.stars-rotating {
   position: absolute;
   width: 100%;
   height: 100%;
+  background-repeat: repeat;
+}
+
+.stars-small {
   background-image: 
     radial-gradient(2px 2px at 20% 30%, white, transparent),
-    radial-gradient(2px 2px at 60% 70%, white, transparent),
+    radial-gradient(1px 1px at 60% 70%, white, transparent),
     radial-gradient(1px 1px at 50% 50%, white, transparent),
     radial-gradient(1px 1px at 80% 10%, white, transparent),
     radial-gradient(2px 2px at 90% 60%, white, transparent),
     radial-gradient(1px 1px at 33% 80%, white, transparent),
     radial-gradient(1px 1px at 15% 90%, white, transparent);
-  background-repeat: repeat;
-  background-size: 200px 200px;
-}
-
-.stars-small {
   background-size: 250px 250px;
   animation: twinkle 3s ease-in-out infinite;
 }
 
 .stars-medium {
+  background-image: 
+    radial-gradient(2px 2px at 25% 40%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 70% 20%, white, transparent),
+    radial-gradient(2px 2px at 45% 75%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 85% 85%, white, transparent),
+    radial-gradient(1px 1px at 10% 50%, white, transparent);
   background-size: 350px 350px;
-  animation: twinkle 5s ease-in-out infinite 1s;
+  animation: twinkle 5s ease-in-out infinite 1s, gentle-rotate 120s linear infinite;
 }
 
-.stars-large {
+.stars-large-purple {
+  background-image: 
+    radial-gradient(3px 3px at 30% 25%, #7c3aed, transparent),
+    radial-gradient(2px 2px at 65% 60%, #a78bfa, transparent),
+    radial-gradient(2px 2px at 50% 80%, #7c3aed, transparent),
+    radial-gradient(3px 3px at 15% 45%, #8b5cf6, transparent),
+    radial-gradient(2px 2px at 85% 15%, #a78bfa, transparent);
   background-size: 450px 450px;
   animation: twinkle 7s ease-in-out infinite 2s;
+}
+
+.stars-rotating {
+  background-image: 
+    radial-gradient(2px 2px at 40% 35%, #7c3aed, transparent),
+    radial-gradient(1px 1px at 75% 55%, #a78bfa, transparent),
+    radial-gradient(2px 2px at 20% 70%, #8b5cf6, transparent);
+  background-size: 500px 500px;
+  animation: twinkle 4s ease-in-out infinite 0.5s, gentle-rotate 200s linear infinite reverse;
 }
 
 /* Custom Scrollbar Styles - GLOBAL */
