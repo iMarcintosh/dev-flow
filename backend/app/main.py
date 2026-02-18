@@ -53,6 +53,9 @@ app.include_router(custom_agents.router)
 app.include_router(agent_chat.router)
 app.include_router(teams.router)
 
+from app.api.routes import knowledge_base
+app.include_router(knowledge_base.router)
+
 
 @app.on_event("startup")
 async def startup_event():

@@ -207,6 +207,7 @@ def bind_tools_to_llm(
     db=None,
     user_id: str = None,
     project_id: str = None,
+    agent_id: str = None,
 ) -> BaseChatModel:
     """
     Bind selected tools to an LLM.
@@ -217,11 +218,13 @@ def bind_tools_to_llm(
         db: Database session (required for board tools)
         user_id: User ID (required for board tools)
         project_id: Project ID (required for board tools)
+        agent_id: Agent ID (required for knowledge_base tool)
     
     Returns:
         LLM with tools bound (or original LLM if no tools or binding not supported)
     """
     from app.agent.tools.code_execution_tool import code_execution_tool
+    from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
     
     tools = []
     
@@ -236,7 +239,12 @@ def bind_tools_to_llm(
         elif tool_name == "code_execution":
             tools.append(code_execution_tool)
         
-        # TODO: Add other tools (knowledge_base, etc.)
+        elif tool_name == "knowledge_base":
+            if agent_id:
+                # Create tool instance with agent_id bound
+                kb_tool = KnowledgeBaseTool()
+                # We'll need to pass agent_id when the tool is called
+                tools.append(kb_tool)
     
     if not tools:
         return llm

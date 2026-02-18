@@ -71,6 +71,7 @@ async def run_custom_agent(
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
+            agent_id=str(agent_id),  # Pass agent_id for knowledge_base tool
         )
     
     # Create messages with system prompt

@@ -5,6 +5,7 @@ import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent, CustomAgentCreate } from '@/types/custom-agent'
 import { AVAILABLE_TOOLS, DEFAULT_AGENT_ICON } from '@/types/custom-agent'
 import api from '@/services/api'
+import KnowledgeBaseUpload from './KnowledgeBaseUpload'
 
 interface AgentModalProps {
   agent?: CustomAgent | null
@@ -20,6 +21,7 @@ interface LLMConfig {
 
 export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const isEdit = !!agent
+  const [activeTab, setActiveTab] = useState<'config' | 'knowledge'>('config')
 
   const [formData, setFormData] = useState({
     name: agent?.name || '',
@@ -103,8 +105,40 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="border-b border-border">
+          <div className="flex gap-1 px-6">
+            <button
+              type="button"
+              onClick={() => setActiveTab('config')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'config'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              ⚙️ Configuration
+            </button>
+            {isEdit && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('knowledge')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'knowledge'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                📚 Knowledge Base
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {activeTab === 'config' ? (
+            <>
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -271,6 +305,11 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
               <option value="public">Public (Marketplace)</option>
             </select>
           </div>
+            </>
+          ) : (
+            /* Knowledge Base Tab */
+            <KnowledgeBaseUpload agentId={agent?.id || ''} />
+          )}
         </form>
 
         {/* Footer */}
