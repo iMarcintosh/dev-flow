@@ -224,8 +224,7 @@ def bind_tools_to_llm(
         LLM with tools bound (or original LLM if no tools or binding not supported)
     """
     from app.agent.tools.code_execution_tool import code_execution_tool
-    # Temporarily disabled due to chromadb dependency issues
-    # from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
+    from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
     
     tools = []
     
@@ -241,11 +240,9 @@ def bind_tools_to_llm(
             tools.append(code_execution_tool)
         
         elif tool_name == "knowledge_base":
-            # Temporarily disabled due to chromadb dependency issues
-            pass
-            # if agent_id:
-            #     kb_tool = KnowledgeBaseTool()
-            #     tools.append(kb_tool)
+            if agent_id:
+                kb_tool = KnowledgeBaseTool()
+                tools.append(kb_tool)
     
     if not tools:
         return llm
