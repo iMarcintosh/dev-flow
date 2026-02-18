@@ -115,7 +115,7 @@ class KnowledgeBaseService:
     
     def generate_embedding(self, text: str) -> Optional[List[float]]:
         """
-        Generate embedding for text using OpenAI
+        Generate embedding for text using OpenAI or local model fallback
         
         Args:
             text: Text to embed
@@ -123,18 +123,34 @@ class KnowledgeBaseService:
         Returns:
             Embedding vector or None if failed
         """
-        if not self.openai_client:
-            logger.warning("OpenAI client not initialized, cannot generate embeddings")
-            return None
+        # Try OpenAI first if available
+        if self.openai_client:
+            try:
+                response = self.openai_client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=text
+                )
+                return response.data[0].embedding
+            except Exception as e:
+                logger.error(f"Error generating OpenAI embedding: {e}")
         
+        # Fallback to local sentence-transformers model
         try:
-            response = self.openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return response.data[0].embedding
+            from sentence_transformers import SentenceTransformer
+            
+            # Lazy load model (cache it after first use)
+            if not hasattr(self, '_local_model'):
+                logger.info("Loading local embedding model (all-MiniLM-L6-v2)...")
+                self._local_model = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            embedding = self._local_model.encode(text, convert_to_numpy=True)
+            return embedding.tolist()
+            
+        except ImportError:
+            logger.error("sentence-transformers not installed. Cannot generate embeddings.")
+            return None
         except Exception as e:
-            logger.error(f"Error generating embedding: {e}")
+            logger.error(f"Error generating local embedding: {e}")
             return None
     
     async def add_file_to_knowledge_base(
