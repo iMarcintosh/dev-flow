@@ -180,3 +180,43 @@ export const useSendChatMessage = () => {
     },
   })
 }
+
+// Model selection queries
+export const useAvailableModels = () => {
+  return useQuery({
+    queryKey: ['models'],
+    queryFn: async () => {
+      const response = await api.get('/api/models')
+      return response.data
+    },
+    staleTime: 1000 * 60 * 60, // 1 hour
+  })
+}
+
+export const useUpdateUserPreferences = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (preferences: Record<string, string>) => {
+      const response = await api.patch('/api/auth/me/preferences', preferences)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user'] })
+    },
+  })
+}
+
+export const useRefreshModels = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/api/models/refresh')
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['models'] })
+    },
+  })
+}

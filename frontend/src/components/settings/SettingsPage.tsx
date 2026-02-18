@@ -1,9 +1,59 @@
 import { AppLayout } from '@/components/layout/AppLayout'
 import { useAuthStore } from '@/stores/authStore'
-import { User, Mail, Shield, Calendar } from 'lucide-react'
+import { User, Mail, Shield, Calendar, Cpu, RefreshCw, Save, Loader2 } from 'lucide-react'
+import { useAvailableModels, useUpdateUserPreferences, useRefreshModels } from '@/services/queries'
+import ModelSelector from './ModelSelector'
+import { useState, useEffect } from 'react'
 
 export default function SettingsPage() {
   const user = useAuthStore((state) => state.user)
+  const { data: modelsData, isLoading: modelsLoading } = useAvailableModels()
+  const updatePreferences = useUpdateUserPreferences()
+  const refreshModels = useRefreshModels()
+  
+  // Local state for preferences
+  const [taskCreatorModel, setTaskCreatorModel] = useState('')
+  const [chatAgentModel, setChatAgentModel] = useState('')
+  const [hasChanges, setHasChanges] = useState(false)
+
+  // Initialize from user data
+  useEffect(() => {
+    if (user?.preferred_models) {
+      setTaskCreatorModel(user.preferred_models.task_creator || 'claude-3-haiku-20240307')
+      setChatAgentModel(user.preferred_models.chat_agent || 'claude-3-haiku-20240307')
+    } else {
+      setTaskCreatorModel('claude-3-haiku-20240307')
+      setChatAgentModel('claude-3-haiku-20240307')
+    }
+  }, [user])
+
+  // Track changes
+  useEffect(() => {
+    const currentTask = user?.preferred_models?.task_creator || 'claude-3-haiku-20240307'
+    const currentChat = user?.preferred_models?.chat_agent || 'claude-3-haiku-20240307'
+    setHasChanges(
+      taskCreatorModel !== currentTask || chatAgentModel !== currentChat
+    )
+  }, [taskCreatorModel, chatAgentModel, user])
+
+  const handleSave = async () => {
+    try {
+      await updatePreferences.mutateAsync({
+        task_creator: taskCreatorModel,
+        chat_agent: chatAgentModel
+      })
+    } catch (error) {
+      console.error('Failed to save preferences:', error)
+    }
+  }
+
+  const handleRefreshModels = async () => {
+    try {
+      await refreshModels.mutateAsync()
+    } catch (error) {
+      console.error('Failed to refresh models:', error)
+    }
+  }
 
   if (!user) {
     return (
@@ -145,6 +195,113 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* AI Model Preferences Section */}
+          <div className="bg-card border border-border rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                  <Cpu className="w-5 h-5" />
+                  AI Model Preferences
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Choose which AI models to use for different agents
+                </p>
+              </div>
+              <button
+                onClick={handleRefreshModels}
+                disabled={refreshModels.isPending}
+                className="px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {refreshModels.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Refresh Models
+              </button>
+            </div>
+
+            {modelsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                <span className="ml-3 text-gray-400">Loading available models...</span>
+              </div>
+            ) : modelsData ? (
+              <div className="space-y-6">
+                {/* Task Creator Model */}
+                <ModelSelector
+                  label="Task Creator Agent"
+                  value={taskCreatorModel}
+                  onChange={setTaskCreatorModel}
+                  models={modelsData}
+                />
+
+                {/* Chat Agent Model */}
+                <ModelSelector
+                  label="Chat Agent"
+                  value={chatAgentModel}
+                  onChange={setChatAgentModel}
+                  models={modelsData}
+                />
+
+                {/* Save Button */}
+                {hasChanges && (
+                  <div className="pt-4 border-t border-gray-700">
+                    <button
+                      onClick={handleSave}
+                      disabled={updatePreferences.isPending}
+                      className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {updatePreferences.isPending ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-5 h-5" />
+                          Save Preferences
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* API Key Status */}
+                <div className="pt-4 border-t border-gray-700">
+                  <p className="text-sm font-medium text-gray-300 mb-3">API Key Status</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="px-3 py-2 bg-gray-800 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-xs text-gray-400">Anthropic</span>
+                      </div>
+                    </div>
+                    <div className="px-3 py-2 bg-gray-800 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-600"></div>
+                        <span className="text-xs text-gray-400">OpenAI</span>
+                      </div>
+                    </div>
+                    <div className="px-3 py-2 bg-gray-800 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-600"></div>
+                        <span className="text-xs text-gray-400">OpenRouter</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Configure API keys in your .env file to enable additional providers
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                Failed to load models. Please try refreshing.
+              </div>
+            )}
           </div>
 
           {/* Preferences Section */}
