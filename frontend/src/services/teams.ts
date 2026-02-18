@@ -41,30 +41,30 @@ export interface UpdateRoleRequest {
 
 // List user's teams
 export const listTeams = async (): Promise<Team[]> => {
-  const response = await api.get('/teams')
+  const response = await api.get('/api/teams')
   return response.data
 }
 
 // Create a team
 export const createTeam = async (data: CreateTeamRequest): Promise<Team> => {
-  const response = await api.post('/teams', data)
+  const response = await api.post('/api/teams', data)
   return response.data
 }
 
 // Get team details
 export const getTeam = async (teamId: string): Promise<TeamDetail> => {
-  const response = await api.get(`/teams/${teamId}`)
+  const response = await api.get(`/api/teams/${teamId}`)
   return response.data
 }
 
 // Delete team (owner only)
 export const deleteTeam = async (teamId: string): Promise<void> => {
-  await api.delete(`/teams/${teamId}`)
+  await api.delete(`/api/teams/${teamId}`)
 }
 
 // List team members
 export const listTeamMembers = async (teamId: string): Promise<TeamMember[]> => {
-  const response = await api.get(`/teams/${teamId}/members`)
+  const response = await api.get(`/api/teams/${teamId}/members`)
   return response.data
 }
 
@@ -73,7 +73,7 @@ export const addTeamMember = async (
   teamId: string,
   data: AddMemberRequest
 ): Promise<TeamMember> => {
-  const response = await api.post(`/teams/${teamId}/members`, data)
+  const response = await api.post(`/api/teams/${teamId}/members`, data)
   return response.data
 }
 
@@ -83,7 +83,7 @@ export const updateMemberRole = async (
   userId: string,
   data: UpdateRoleRequest
 ): Promise<TeamMember> => {
-  const response = await api.patch(`/teams/${teamId}/members/${userId}`, data)
+  const response = await api.patch(`/api/teams/${teamId}/members/${userId}`, data)
   return response.data
 }
 
@@ -92,11 +92,11 @@ export const removeMemberTeam = async (
   teamId: string,
   userId: string
 ): Promise<void> => {
-  await api.delete(`/teams/${teamId}/members/${userId}`)
+  await api.delete(`/api/teams/${teamId}/members/${userId}`)
 }
 
 // List team agents
 export const listTeamAgents = async (teamId: string): Promise<any[]> => {
-  const response = await api.get(`/teams/${teamId}/agents`)
+  const response = await api.get(`/api/teams/${teamId}/agents`)
   return response.data
 }
