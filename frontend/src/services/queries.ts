@@ -288,3 +288,79 @@ export const useDeleteApiKey = () => {
     },
   })
 }
+
+// ==================== TEAMS ====================
+
+import * as teamsApi from './teams'
+import type { Team, TeamDetail, CreateTeamRequest, AddMemberRequest, UpdateRoleRequest } from './teams'
+
+export const useTeams = () => {
+  return useQuery({
+    queryKey: ['teams'],
+    queryFn: teamsApi.listTeams,
+  })
+}
+
+export const useTeam = (teamId: string | undefined) => {
+  return useQuery({
+    queryKey: ['teams', teamId],
+    queryFn: () => teamsApi.getTeam(teamId!),
+    enabled: !!teamId,
+  })
+}
+
+export const useCreateTeam = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (data: CreateTeamRequest) => teamsApi.createTeam(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] })
+    },
+  })
+}
+
+export const useDeleteTeam = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (teamId: string) => teamsApi.deleteTeam(teamId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] })
+    },
+  })
+}
+
+export const useAddTeamMember = (teamId: string) => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (data: AddMemberRequest) => teamsApi.addTeamMember(teamId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', teamId] })
+    },
+  })
+}
+
+export const useRemoveTeamMember = (teamId: string) => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (userId: string) => teamsApi.removeMemberTeam(teamId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', teamId] })
+    },
+  })
+}
+
+export const useUpdateMemberRole = (teamId: string) => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: 'member' | 'admin' }) =>
+      teamsApi.updateMemberRole(teamId, userId, { role }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', teamId] })
+    },
+  })
+}

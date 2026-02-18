@@ -1,5 +1,5 @@
 import { Link, useMatchRoute } from '@tanstack/react-router'
-import { LayoutDashboard, Cpu, Settings as SettingsIcon, LogOut, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, Cpu, Settings as SettingsIcon, LogOut, ChevronDown, Users } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import logoHorizontal from '@/assets/images/logos/devflow-logo-horizontal.png'
 import { useState, useRef, useEffect } from 'react'
@@ -14,6 +14,7 @@ export function Sidebar() {
   const navigation = [
     { name: 'Board', href: '/board', icon: LayoutDashboard },
     { name: 'Agent Hub', href: '/agents', icon: Cpu },
+    { name: 'Teams', href: '/teams', icon: Users },
   ]
 
   // Close dropdown when clicking outside
