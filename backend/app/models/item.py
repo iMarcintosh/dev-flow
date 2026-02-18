@@ -42,6 +42,7 @@ class Item(Base):
     status = Column(SQLEnum(ItemStatus), nullable=False, default=ItemStatus.BACKLOG)
     priority = Column(SQLEnum(ItemPriority), nullable=False, default=ItemPriority.MEDIUM)
     assignee_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    assigned_agent_id = Column(UUID(as_uuid=True), ForeignKey("custom_agents.id", ondelete="SET NULL"), nullable=True)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), nullable=True)
     tags = Column(JSON, default=list)
     position = Column(Float, nullable=False, default=0.0)
@@ -52,6 +53,7 @@ class Item(Base):
 
     project = relationship("Project", back_populates="items")
     assignee = relationship("User", foreign_keys=[assignee_id])
+    assigned_agent = relationship("CustomAgent", foreign_keys=[assigned_agent_id])
     creator = relationship("User", foreign_keys=[created_by])
     parent = relationship("Item", remote_side=[id], backref="subtasks")
 

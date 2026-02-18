@@ -39,6 +39,7 @@ class ItemResponse(ItemBase):
     project_id: uuid.UUID
     status: ItemStatus
     assignee_id: Optional[uuid.UUID] = None
+    assigned_agent_id: Optional[uuid.UUID] = None
     parent_id: Optional[uuid.UUID] = None
     position: float
     created_at: datetime

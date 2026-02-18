@@ -253,3 +253,112 @@ async def bulk_reorder_items(
     await db.commit()
     
     return {"success": True, "updated": len(item_ids)}
+
+
+# Agent Assignment Endpoints
+@router.post("/{item_id}/assign-agent")
+async def assign_agent_to_item(
+    item_id: uuid.UUID,
+    agent_id: uuid.UUID = Body(..., embed=True),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Assign a custom agent to a board item."""
+    # Get item
+    result = await db.execute(select(Item).where(Item.id == item_id))
+    item = result.scalar_one_or_none()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Verify project access
+    await verify_project_access(item.project_id, current_user, db)
+    
+    # Verify agent exists and user has access
+    from app.services.custom_agent_service import get_agent_by_id
+    agent = await get_agent_by_id(agent_id, current_user.id, db)
+    
+    # Assign agent
+    item.assigned_agent_id = agent_id
+    await db.commit()
+    await db.refresh(item)
+    
+    return {"status": "success", "item_id": str(item_id), "agent_id": str(agent_id)}
+
+
+@router.delete("/{item_id}/assign-agent")
+async def unassign_agent_from_item(
+    item_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove agent assignment from a board item."""
+    # Get item
+    result = await db.execute(select(Item).where(Item.id == item_id))
+    item = result.scalar_one_or_none()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Verify project access
+    await verify_project_access(item.project_id, current_user, db)
+    
+    # Unassign agent
+    item.assigned_agent_id = None
+    await db.commit()
+    
+    return {"status": "success"}
+
+
+@router.post("/{item_id}/agent-action")
+async def trigger_agent_action(
+    item_id: uuid.UUID,
+    message: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Trigger the assigned agent to act on this item with a specific message."""
+    # Get item with agent
+    result = await db.execute(
+        select(Item).where(Item.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    if not item.assigned_agent_id:
+        raise HTTPException(status_code=400, detail="No agent assigned to this item")
+    
+    # Verify project access
+    await verify_project_access(item.project_id, current_user, db)
+    
+    # Run agent with context about the item
+    from app.agent.custom_agent_runner import run_custom_agent
+    
+    # Build context-aware message
+    context_message = f"""You are helping with this board item:
+
+Title: {item.title}
+Description: {item.description or 'No description'}
+Status: {item.status.value}
+Priority: {item.priority.value}
+Type: {item.type.value}
+
+User request: {message}
+
+Please help with this item. You can use board tools to update the status, add comments, or create related tasks."""
+    
+    result = await run_custom_agent(
+        agent_id=item.assigned_agent_id,
+        user_id=current_user.id,
+        input_text=context_message,
+        db=db,
+        project_id=item.project_id
+    )
+    
+    return {
+        "status": "success",
+        "agent_response": result.get("response"),
+        "error": result.get("error")
+    }
