@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # LLM
     anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
     llm_provider: str = "anthropic"
     
     # Email

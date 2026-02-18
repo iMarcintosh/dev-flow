@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, Column, String, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -16,6 +16,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
+    preferred_models = Column(JSON, nullable=True)  # NEW: Model preferences per agent
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
