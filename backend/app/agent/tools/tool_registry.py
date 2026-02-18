@@ -226,6 +226,9 @@ def bind_tools_to_llm(
     from app.agent.tools.code_execution_tool import code_execution_tool
     from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
     tools = []
     
     for tool_name in tool_names:
@@ -238,25 +241,33 @@ def bind_tools_to_llm(
         
         elif tool_name == "code_execution":
             tools.append(code_execution_tool)
+            logger.info(f"✅ Added code_execution tool")
         
         elif tool_name == "knowledge_base":
             if agent_id:
                 kb_tool = KnowledgeBaseTool(agent_id=agent_id)
                 tools.append(kb_tool)
+                logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
+            else:
+                logger.warning(f"⚠️ knowledge_base tool requested but no agent_id provided")
     
     if not tools:
+        logger.warning("⚠️ No tools to bind!")
         return llm
+    
+    logger.info(f"🔧 Attempting to bind {len(tools)} tools: {[t.name for t in tools]}")
     
     # Try to bind tools (not all LLMs support this)
     try:
         if hasattr(llm, 'bind_tools'):
-            return llm.bind_tools(tools)
+            bound_llm = llm.bind_tools(tools)
+            logger.info(f"✅ Successfully bound tools to LLM")
+            return bound_llm
         else:
-            # For LLMs that don't support bind_tools, return as is
-            # Tools will need to be handled differently
+            logger.warning(f"⚠️ LLM does not support bind_tools method")
             return llm
-    except Exception:
-        # If binding fails, return original LLM
+    except Exception as e:
+        logger.error(f"❌ Error binding tools: {e}")
         return llm
 
 

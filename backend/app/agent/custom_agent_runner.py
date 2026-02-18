@@ -63,6 +63,7 @@ async def run_custom_agent(
     
     # Bind tools if enabled
     if agent.enabled_tools:
+        logger.info(f"🔧 Binding tools to LLM: {agent.enabled_tools}")
         llm = bind_tools_to_llm(
             llm=llm,
             tool_names=agent.enabled_tools,
@@ -71,6 +72,7 @@ async def run_custom_agent(
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),  # Pass agent_id for knowledge_base tool
         )
+        logger.info(f"✅ Tools bound successfully")
     
     # Create messages with system prompt
     messages = [
