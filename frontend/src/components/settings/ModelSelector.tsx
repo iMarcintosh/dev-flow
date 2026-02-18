@@ -96,7 +96,7 @@ export default function ModelSelector({
       {isOpen && (
         <>
           <div 
-            className="fixed inset-0 z-10" 
+            className="fixed inset-0 z-10 backdrop-blur-[2px]" 
             onClick={() => setIsOpen(false)}
           />
           <div className="absolute z-20 w-full mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-96 overflow-y-auto">

@@ -135,7 +135,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const isPending = createMutation.isPending || updateMutation.isPending
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">

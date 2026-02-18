@@ -4,6 +4,7 @@ import api from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { LoginCredentials } from '@/types'
 import logoLarge from '@/assets/images/logos/devflow-logo-large.png'
+import { Starfield } from './Starfield'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -34,8 +35,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 relative">
+      {/* Animated Starfield Background */}
+      <Starfield />
+      
+      <div className="w-full max-w-md relative z-10">
         {/* Logo with glow */}
         <div className="text-center mb-2 relative">
           <div className="relative inline-block">
@@ -44,7 +48,7 @@ export default function LoginPage() {
             <img 
               src={logoLarge} 
               alt="DevFlow Logo" 
-              className="relative w-[32rem] h-auto mx-auto mb-1 drop-shadow-2xl"
+              className="relative w-80 h-auto mx-auto mb-1 drop-shadow-2xl"
             />
           </div>
           <p className="text-muted-foreground text-sm mb-2">Sign in to your account</p>
