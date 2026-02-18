@@ -7,6 +7,7 @@ import LoginPage from './components/auth/LoginPage'
 import RegisterPage from './components/auth/RegisterPage'
 import BoardPage from './components/board/BoardPage'
 import AgentHubPage from './components/agent-hub/AgentHubPage'
+import AgentChatPage from './components/agent-chat/AgentChatPage'
 import SettingsPage from './components/settings/SettingsPage'
 
 const queryClient = new QueryClient()
@@ -46,6 +47,12 @@ const agentsRoute = createRoute({
   component: AgentHubPage,
 })
 
+const chatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/chat',
+  component: AgentChatPage,
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -58,6 +65,7 @@ const routeTree = rootRoute.addChildren([
   registerRoute,
   boardRoute,
   agentsRoute,
+  chatRoute,
   settingsRoute,
 ])
 

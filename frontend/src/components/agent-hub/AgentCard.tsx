@@ -46,8 +46,7 @@ export function AgentCard({
 
   const handleChat = (e: React.MouseEvent) => {
     e.stopPropagation()
-    // TODO: Navigate to chat with this agent
-    console.log('Chat with agent:', agent.id)
+    window.location.href = `/chat?agent_id=${agent.id}`
   }
 
   const handleInstall = (e: React.MouseEvent) => {
