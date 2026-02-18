@@ -11,6 +11,7 @@ interface AgentCardProps {
   onEdit?: () => void
   onDeleted?: () => void
   onInstalled?: () => void
+  onViewDetails?: () => void
 }
 
 export function AgentCard({
@@ -19,6 +20,7 @@ export function AgentCard({
   onEdit,
   onDeleted,
   onInstalled,
+  onViewDetails,
 }: AgentCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 

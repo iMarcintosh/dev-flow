@@ -6,6 +6,7 @@ import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent } from '@/types/custom-agent'
 import { AgentCard } from './AgentCard'
 import { AgentModal } from './AgentModal'
+import { AgentDetailsModal } from './AgentDetailsModal'
 import { TemplateGrid } from './TemplateGrid'
 
 type TabType = 'my-agents' | 'templates' | 'marketplace'
@@ -15,6 +16,7 @@ export default function AgentHubPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingAgent, setEditingAgent] = useState<CustomAgent | null>(null)
+  const [selectedAgentForDetails, setSelectedAgentForDetails] = useState<CustomAgent | null>(null)
   const queryClient = useQueryClient()
 
   // Fetch my agents
