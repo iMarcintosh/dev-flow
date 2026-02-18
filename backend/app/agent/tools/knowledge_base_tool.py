@@ -13,7 +13,6 @@ from app.services.knowledge_base import knowledge_base_service
 class KnowledgeBaseInput(BaseModel):
     """Input schema for knowledge base search"""
     query: str = Field(description="Search query to find relevant information in knowledge base")
-    agent_id: str = Field(description="Agent ID to search knowledge base for")
 
 
 class KnowledgeBaseTool(BaseTool):
@@ -27,12 +26,13 @@ class KnowledgeBaseTool(BaseTool):
         "Returns the most relevant text chunks from uploaded files."
     )
     args_schema: Type[BaseModel] = KnowledgeBaseInput
+    agent_id: str = ""  # Will be set when tool is created
     
-    def _run(self, query: str, agent_id: str) -> str:
+    def _run(self, query: str) -> str:
         """Search knowledge base synchronously"""
         try:
             results = knowledge_base_service.search_knowledge_base(
-                agent_id=agent_id,
+                agent_id=self.agent_id,
                 query=query,
                 n_results=3
             )
@@ -55,7 +55,7 @@ class KnowledgeBaseTool(BaseTool):
         except Exception as e:
             return f"❌ Error searching knowledge base: {str(e)}"
     
-    async def _arun(self, query: str, agent_id: str) -> str:
+    async def _arun(self, query: str) -> str:
         """Search knowledge base asynchronously"""
         # For now, just call sync version
-        return self._run(query, agent_id)
+        return self._run(query)

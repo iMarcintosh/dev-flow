@@ -241,7 +241,7 @@ def bind_tools_to_llm(
         
         elif tool_name == "knowledge_base":
             if agent_id:
-                kb_tool = KnowledgeBaseTool()
+                kb_tool = KnowledgeBaseTool(agent_id=agent_id)
                 tools.append(kb_tool)
     
     if not tools:
