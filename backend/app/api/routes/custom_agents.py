@@ -425,11 +425,11 @@ async def trigger_agent_manually(
 @router.patch("/{agent_id}/schedule", response_model=CustomAgentResponse)
 async def update_schedule(
     agent_id: UUID,
-    schedule: Optional[str] = Query(None, description="Cron expression"),
-    enabled: Optional[bool] = Query(None, description="Enable/disable schedule"),
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = Depends(),
+    schedule: Optional[str] = Query(None, description="Cron expression"),
+    enabled: Optional[bool] = Query(None, description="Enable/disable schedule"),
 ):
     """
     Update agent schedule settings.
