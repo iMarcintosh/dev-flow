@@ -281,3 +281,27 @@ async def star_agent(
     
     agent.star_count += 1
     await db.commit()
+
+
+@router.post("/{agent_id}/test", status_code=200)
+async def test_agent(
+    agent_id: UUID,
+    test_input: Optional[str] = Query(None, description="Test input message"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Test an agent with a sample input.
+    
+    Useful for validating configuration before using the agent.
+    """
+    from app.agent import custom_agent_runner
+    
+    result = await custom_agent_runner.run_custom_agent(
+        db=db,
+        agent_id=agent_id,
+        user_id=current_user.id,
+        input_text=test_input or "Hello! Please introduce yourself and describe what you can help with.",
+    )
+    
+    return result
