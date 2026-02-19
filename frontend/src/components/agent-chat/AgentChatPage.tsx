@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -7,6 +7,8 @@ import { conversationService, customAgentService } from '@/services/custom-agent
 import { ConversationList } from './ConversationList'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function AgentChatPage() {
   const navigate = useNavigate()
@@ -19,6 +21,11 @@ export default function AgentChatPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>(
     conversationIdFromUrl
   )
+  const [chatError, setChatError] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamingContent, setStreamingContent] = useState('')
+  const [activeTools, setActiveTools] = useState<Array<{ name: string; done: boolean; duration_ms?: number }>>([])
+  const abortRef = useRef<AbortController | null>(null)
 
   const { data: agent, isLoading: agentLoading } = useQuery({
     queryKey: ['custom-agent', agentId],
@@ -54,6 +61,7 @@ export default function AgentChatPage() {
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId)
+    setChatError(false)
   }
 
   const handleDeleteConversation = (conversationId: string) => {
@@ -62,6 +70,87 @@ export default function AgentChatPage() {
       setSelectedConversationId(otherConversations[0]?.id)
     }
     queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
+  }
+
+  const sendMessage = async (text: string) => {
+    if (!selectedConversationId || isStreaming) return
+
+    // Cancel any in-progress stream
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    setIsStreaming(true)
+    setStreamingContent('')
+    setActiveTools([])
+    setChatError(false)
+
+    try {
+      const token = localStorage.getItem('access_token')
+      const url = `${API_URL}/api/agent-chat/conversations/${selectedConversationId}/messages/stream?message=${encodeURIComponent(text)}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+
+            if (event.type === 'stream') {
+              setStreamingContent((prev) => prev + event.content)
+            } else if (event.type === 'tool_call') {
+              setActiveTools((prev) => [...prev, { name: event.name, done: false }])
+            } else if (event.type === 'tool_result') {
+              setActiveTools((prev) =>
+                prev.map((t) =>
+                  t.name === event.name && !t.done
+                    ? { ...t, done: true, duration_ms: event.duration_ms }
+                    : t
+                )
+              )
+            } else if (event.type === 'end') {
+              setIsStreaming(false)
+              setStreamingContent('')
+              setActiveTools([])
+              queryClient.invalidateQueries({
+                queryKey: ['conversation-messages', selectedConversationId],
+              })
+              queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
+            } else if (event.type === 'error') {
+              setIsStreaming(false)
+              setChatError(true)
+            }
+          } catch {
+            // malformed JSON chunk — skip
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Streaming error:', err)
+        setChatError(true)
+      }
+      setIsStreaming(false)
+    }
   }
 
   if (!agentId) {
@@ -144,8 +233,20 @@ export default function AgentChatPage() {
           <div className="flex-1 flex flex-col">
             {selectedConversation ? (
               <>
-                <MessageList conversationId={selectedConversation.id} agentId={agentId} />
-                <ChatInput conversationId={selectedConversation.id} />
+                <MessageList
+                  conversationId={selectedConversation.id}
+                  agentId={agentId}
+                  hasError={chatError}
+                  isStreaming={isStreaming}
+                  streamingContent={streamingContent}
+                  activeTools={activeTools}
+                />
+                <ChatInput
+                  conversationId={selectedConversation.id}
+                  onError={setChatError}
+                  isStreaming={isStreaming}
+                  onSendMessage={sendMessage}
+                />
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center">

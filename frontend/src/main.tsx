@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { RouterProvider, createRouter, createRootRoute, createRoute } from '@tanstack/react-router'
+import { RouterProvider, createRouter, createRootRoute, createRoute, redirect } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import LoginPage from './components/auth/LoginPage'
@@ -19,9 +19,8 @@ const rootRoute = createRootRoute()
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => {
-    window.location.href = '/login'
-    return null
+  beforeLoad: () => {
+    throw redirect({ to: '/login' })
   },
 })
 

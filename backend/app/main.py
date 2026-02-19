@@ -30,10 +30,15 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     logger.error(f"Global exception: {exc}")
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"success": False, "error": "Internal server error", "details": str(exc)}
     )
+    origin = request.headers.get("origin")
+    if origin and origin in settings.backend_cors_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 @app.get("/health")

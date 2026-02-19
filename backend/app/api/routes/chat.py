@@ -1,7 +1,10 @@
 """Chat API endpoints."""
 
+import json
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -14,6 +17,8 @@ from app.models.chat import ChatMessage
 from app.agent.registry import registry
 from app.agent.base_agent import AgentInput
 from app.models.agent_run import AgentRun, AgentRunStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -99,6 +104,122 @@ async def send_chat_message(
     return ChatResponse(
         message=result.output.get("message", ""),
         referenced_items=result.output.get("referenced_items", [])
+    )
+
+
+@router.post("/stream")
+async def send_chat_message_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream chat response as SSE."""
+    agent = registry.get("chat_agent")
+    if not agent:
+        raise HTTPException(status_code=500, detail="Chat agent not available")
+
+    async def generate():
+        try:
+            yield f'data: {json.dumps({"type": "start"})}\n\n'
+
+            # 1. Save user message immediately
+            user_msg = ChatMessage(
+                user_id=str(current_user.id),
+                project_id=request.project_id,
+                role="user",
+                content=request.message,
+            )
+            db.add(user_msg)
+            await db.commit()
+
+            # 2. Load conversation history (last 20 messages)
+            history = await agent._get_conversation_history(
+                db, request.project_id, limit=20
+            )
+
+            # 3. Get project context (stats + semantic search)
+            from app.agent.memory.vector_store import vector_store
+            stats = await vector_store.get_project_stats(db, request.project_id)
+            relevant_items = await vector_store.similarity_search(
+                db, request.message, request.project_id, top_k=5
+            )
+            context = agent._build_context(stats, relevant_items, history)
+
+            # 4. Get LLM
+            llm = await agent._get_llm(str(current_user.id))
+            if not llm:
+                error_msg = "No LLM available. Please configure an API key in Settings."
+                yield f'data: {json.dumps({"type": "stream", "content": error_msg})}\n\n'
+                # Save error as assistant message
+                assistant_msg = ChatMessage(
+                    user_id=str(current_user.id),
+                    project_id=request.project_id,
+                    role="assistant",
+                    content=error_msg,
+                )
+                db.add(assistant_msg)
+                await db.commit()
+                yield f'data: {json.dumps({"type": "end"})}\n\n'
+                return
+
+            # 5. Stream LLM response
+            from langchain_core.messages import SystemMessage, HumanMessage
+
+            system_prompt = f"""You are a helpful AI assistant for DevFlow, a project management tool.
+You have access to the user's project board with all their tasks, bugs, stories, and epics.
+
+{context}
+
+CRITICAL RULES - NEVER VIOLATE THESE:
+1. ONLY reference items that are EXPLICITLY listed in the "Relevant Items" section above
+2. If no relevant items are found, say "I don't see any items matching that" - DO NOT make up items
+3. NEVER invent item titles, descriptions, or details that aren't in the context
+4. Use exact item titles from the context - do not paraphrase or change them
+5. If you're unsure, say "I'm not certain" instead of guessing
+6. When asked about counts, ONLY use the statistics provided in the context
+7. ALWAYS respond in the SAME LANGUAGE the user asked in (German → German, English → English, etc.)
+
+Guidelines:
+- Be concise and helpful
+- Reference specific items by their EXACT title in quotes when relevant
+- Use the project statistics when answering questions about counts or status
+- If you mention an item, format it like: "the bug 'Password field doesn't accept special characters'"
+- Be conversational but professional
+- If the context doesn't contain enough information to answer, explicitly say so
+
+Remember: Accuracy is more important than being helpful. It's better to say "I don't have that information" than to make something up."""
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=request.message),
+            ]
+
+            full_response = ""
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    full_response += chunk.content
+                    yield f'data: {json.dumps({"type": "stream", "content": chunk.content})}\n\n'
+
+            # 6. Save assistant message
+            assistant_msg = ChatMessage(
+                user_id=str(current_user.id),
+                project_id=request.project_id,
+                role="assistant",
+                content=full_response,
+            )
+            db.add(assistant_msg)
+            await db.commit()
+
+            yield f'data: {json.dumps({"type": "end"})}\n\n'
+
+        except Exception as e:
+            logger.exception("Error in chat stream")
+            yield f'data: {json.dumps({"type": "error", "content": str(e)})}\n\n'
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

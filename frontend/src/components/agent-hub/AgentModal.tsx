@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { X, Loader2, AlertCircle } from 'lucide-react'
+import { X, Loader2, AlertCircle, Plus, Trash2 } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 import { toolsService } from '@/services/tools'
-import type { CustomAgent, CustomAgentCreate } from '@/types/custom-agent'
+import type { CustomAgent, CustomAgentCreate, MCPServerConfig } from '@/types/custom-agent'
 import { DEFAULT_AGENT_ICON } from '@/types/custom-agent'
 import { useAvailableModels } from '@/services/queries'
 import ModelSelector from '@/components/settings/ModelSelector'
@@ -13,6 +13,176 @@ import { getErrorMessage, getValidationErrors } from '@/utils/errorHandler'
 import { Select } from '@/components/ui/Select'
 import { CronSelector } from './CronSelector'
 
+function MCPServersTab({
+  servers,
+  onChange,
+}: {
+  servers: MCPServerConfig[]
+  onChange: (servers: MCPServerConfig[]) => void
+}) {
+  const addServer = () => {
+    onChange([...servers, { name: '', command: 'npx', args: [], env: {} }])
+  }
+
+  const removeServer = (index: number) => {
+    onChange(servers.filter((_, i) => i !== index))
+  }
+
+  const updateServer = (index: number, updates: Partial<MCPServerConfig>) => {
+    onChange(servers.map((s, i) => (i === index ? { ...s, ...updates } : s)))
+  }
+
+  const updateArgs = (index: number, argsStr: string) => {
+    const args = argsStr.split(',').map((a) => a.trim()).filter(Boolean)
+    updateServer(index, { args })
+  }
+
+  const updateEnvPair = (serverIndex: number, key: string, value: string, oldKey?: string) => {
+    const server = servers[serverIndex]
+    const env = { ...(server.env || {}) }
+    if (oldKey && oldKey !== key) delete env[oldKey]
+    env[key] = value
+    updateServer(serverIndex, { env })
+  }
+
+  const removeEnvPair = (serverIndex: number, key: string) => {
+    const server = servers[serverIndex]
+    const env = { ...(server.env || {}) }
+    delete env[key]
+    updateServer(serverIndex, { env })
+  }
+
+  const addEnvPair = (serverIndex: number) => {
+    updateEnvPair(serverIndex, '', '', undefined)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-foreground mb-1">MCP Servers</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure external MCP (Model Context Protocol) servers. The agent will load their tools at runtime.
+        </p>
+      </div>
+
+      {servers.length === 0 && (
+        <div className="text-center py-8 border border-dashed border-border rounded-lg text-muted-foreground text-sm">
+          No MCP servers configured. Click "Add Server" to connect one.
+        </div>
+      )}
+
+      {servers.map((server, i) => (
+        <div key={i} className="border border-border rounded-lg p-4 space-y-3 bg-background">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-foreground">Server {i + 1}</span>
+            <button
+              type="button"
+              onClick={() => removeServer(i)}
+              className="text-muted-foreground hover:text-red-500 transition-colors"
+              title="Remove server"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Name</label>
+              <input
+                type="text"
+                value={server.name}
+                onChange={(e) => updateServer(i, { name: e.target.value })}
+                placeholder="e.g. filesystem"
+                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Command</label>
+              <input
+                type="text"
+                value={server.command}
+                onChange={(e) => updateServer(i, { command: e.target.value })}
+                placeholder="e.g. npx"
+                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Args <span className="font-normal">(comma-separated)</span>
+            </label>
+            <input
+              type="text"
+              value={server.args.join(', ')}
+              onChange={(e) => updateArgs(i, e.target.value)}
+              placeholder="e.g. -y, @modelcontextprotocol/server-filesystem, /tmp"
+              className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-foreground text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          {/* Env Variables */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-muted-foreground">
+                Environment Variables <span className="font-normal">(optional)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => addEnvPair(i)}
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                Add
+              </button>
+            </div>
+            {Object.entries(server.env || {}).map(([key, value], envIdx) => (
+              <div key={envIdx} className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={key}
+                  onChange={(e) => updateEnvPair(i, e.target.value, value, key)}
+                  placeholder="KEY"
+                  className="w-2/5 px-2 py-1.5 bg-muted border border-border rounded text-foreground text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
+                <span className="text-muted-foreground text-xs">=</span>
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(e) => updateEnvPair(i, key, e.target.value)}
+                  placeholder="value"
+                  className="flex-1 px-2 py-1.5 bg-muted border border-border rounded text-foreground text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeEnvPair(i, key)}
+                  className="text-muted-foreground hover:text-red-500 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={addServer}
+        className="flex items-center gap-2 px-4 py-2 border border-dashed border-border rounded-lg text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors w-full justify-center"
+      >
+        <Plus className="w-4 h-4" />
+        Add Server
+      </button>
+
+      <div className="text-xs text-muted-foreground p-3 bg-muted/50 rounded-lg space-y-1">
+        <p>💡 Example: Name=<code className="font-mono">filesystem</code>, Command=<code className="font-mono">npx</code>, Args=<code className="font-mono">-y, @modelcontextprotocol/server-filesystem, /tmp</code></p>
+        <p>⚠️ MCP servers run as subprocesses inside the backend container. Ensure required runtimes (Node.js, Python) are available.</p>
+      </div>
+    </div>
+  )
+}
+
 interface AgentModalProps {
   agent?: CustomAgent | null
   onClose: () => void
@@ -21,7 +191,7 @@ interface AgentModalProps {
 
 export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
   const isEdit = !!agent
-  const [activeTab, setActiveTab] = useState<'config' | 'tools' | 'schedule' | 'knowledge'>('config')
+  const [activeTab, setActiveTab] = useState<'config' | 'tools' | 'schedule' | 'knowledge' | 'mcp'>('config')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const toast = useToast()
 
@@ -30,13 +200,14 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     description: agent?.description || '',
     icon: agent?.icon || DEFAULT_AGENT_ICON,
     visibility: agent?.visibility || ('private' as const),
-    model_name: agent?.model_name || 'claude-3-haiku-20240307',
+    model_name: agent?.model_name || 'claude-haiku-4-5',
     system_prompt: agent?.system_prompt || 'You are a helpful AI assistant.',
     scheduled_prompt: agent?.scheduled_prompt || '',
     temperature: agent?.temperature ?? 0.7,
     max_tokens: agent?.max_tokens,
     top_p: agent?.top_p,
     enabled_tools: agent?.enabled_tools || ([] as string[]),
+    tool_config: agent?.tool_config || ({} as Record<string, any>),
     trigger: agent?.trigger || 'manual',
     schedule: agent?.schedule || '',
     schedule_enabled: agent?.schedule_enabled ?? true,
@@ -127,6 +298,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
       system_prompt: formData.system_prompt.trim() || 'You are a helpful AI assistant.',
       max_tokens: formData.max_tokens || undefined,
       top_p: formData.top_p || undefined,
+      tool_config: formData.tool_config,
     }
 
     if (isEdit) {
@@ -210,6 +382,19 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
                 }`}
               >
                 📚 Knowledge Base
+              </button>
+            )}
+            {formData.enabled_tools.includes('mcp') && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('mcp')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'mcp'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                🔌 MCP Servers
               </button>
             )}
           </div>
@@ -553,6 +738,20 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
           ) : activeTab === 'knowledge' ? (
             /* Knowledge Base Tab */
             <KnowledgeBaseUpload agentId={agent?.id || ''} />
+          ) : activeTab === 'mcp' ? (
+            /* MCP Servers Tab */
+            <MCPServersTab
+              servers={(formData.tool_config?.mcp?.servers as MCPServerConfig[]) || []}
+              onChange={(servers) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  tool_config: {
+                    ...prev.tool_config,
+                    mcp: { servers },
+                  },
+                }))
+              }
+            />
           ) : null}
         </form>
 

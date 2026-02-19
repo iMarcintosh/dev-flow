@@ -71,49 +71,66 @@ async def run_custom_agent(
     # Bind tools if enabled
     if agent.enabled_tools:
         logger.info(f"🔧 Binding tools to LLM: {agent.enabled_tools}")
-        
+
         from app.agent.tools.tool_registry import get_tools_list
-        
-        # Get tools list
+
+        # Get tools list (exclude "mcp" — loaded separately below)
         tools = get_tools_list(
-            tool_names=agent.enabled_tools,
+            tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
         )
-        
+
+        # Async-load MCP tools if requested
+        if "mcp" in agent.enabled_tools:
+            from app.agent.tools.mcp_integration import get_mcp_tools
+            mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+            if mcp_configs:
+                mcp_tools = await get_mcp_tools(mcp_configs)
+                tools.extend(mcp_tools)
+            else:
+                logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
+
         if tools:
             # All modern LLMs support bind_tools (OpenAI, Anthropic, etc.)
             llm = llm.bind_tools(tools)
             logger.info(f"✅ Tools bound using bind_tools() - {len(tools)} tools")
         else:
             logger.warning("⚠️ No tools to bind!")
-    
+
     # Create messages with system prompt
     messages = [
         SystemMessage(content=agent.system_prompt),
         HumanMessage(content=input_text),
     ]
-    
+
     # TODO: Add conversation history if conversation_id provided
-    
+
     # Execute agent
     start_time = datetime.now()
     success = False
     tools_used = []
     tools_list = []
-    
+
     # Get tools list for execution (if enabled)
     if agent.enabled_tools:
         from app.agent.tools.tool_registry import get_tools_list
         tools_list = get_tools_list(
-            tool_names=agent.enabled_tools,
+            tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
         )
+        # Async-load MCP tools for execution
+        if "mcp" in agent.enabled_tools:
+            from app.agent.tools.mcp_integration import get_mcp_tools
+            mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+            if mcp_configs:
+                mcp_tools = await get_mcp_tools(mcp_configs)
+                tools_list.extend(mcp_tools)
     
     try:
         # Phase 1: Initial LLM invocation (planning)
@@ -310,14 +327,22 @@ async def run_custom_agent_streaming(
     
     # Bind tools if enabled
     if agent.enabled_tools:
-        llm = bind_tools_to_llm(
-            llm=llm,
-            tool_names=agent.enabled_tools,
+        from app.agent.tools.tool_registry import get_tools_list
+        stream_tools = get_tools_list(
+            tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
         )
+        if "mcp" in agent.enabled_tools:
+            from app.agent.tools.mcp_integration import get_mcp_tools
+            mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+            if mcp_configs:
+                mcp_tools = await get_mcp_tools(mcp_configs)
+                stream_tools.extend(mcp_tools)
+        if stream_tools:
+            llm = llm.bind_tools(stream_tools)
     
     # Create messages with system prompt
     messages = [
@@ -340,6 +365,177 @@ async def run_custom_agent_streaming(
         
     except Exception as e:
         yield f"\n\n❌ Error: {str(e)}"
+
+
+async def run_custom_agent_sse(
+    db: AsyncSession,
+    agent_id: UUID,
+    user_id: UUID,
+    input_text: str,
+    project_id: Optional[UUID] = None,
+    conversation_id: Optional[UUID] = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Execute a custom agent with SSE streaming.
+
+    Yields SSE-formatted strings with event types:
+      {"type":"start"}
+      {"type":"tool_call","name":"...","args":{...}}
+      {"type":"tool_result","name":"...","duration_ms":...}
+      {"type":"stream","content":"token"}
+      {"type":"end","tools_used":[...],"model":"..."}
+      {"type":"error","error":"..."}
+    """
+    # Load agent configuration
+    result = await db.execute(
+        select(CustomAgent).where(CustomAgent.id == agent_id)
+    )
+    agent = result.scalar_one_or_none()
+
+    if not agent:
+        yield f'data: {json.dumps({"type": "error", "error": "Agent not found"})}\n\n'
+        return
+
+    if agent.visibility == "private" and agent.user_id != user_id:
+        yield f'data: {json.dumps({"type": "error", "error": "Access denied"})}\n\n'
+        return
+
+    yield f'data: {json.dumps({"type": "start"})}\n\n'
+
+    start_time = datetime.now()
+    tools_used: List[str] = []
+
+    try:
+        # Create LLM
+        llm = await create_llm(
+            model_name=agent.model_name,
+            user_id=user_id,
+            temperature=agent.temperature,
+            max_tokens=agent.max_tokens,
+        )
+
+        # Get tools list
+        tools_list: List[BaseTool] = []
+        if agent.enabled_tools:
+            from app.agent.tools.tool_registry import get_tools_list
+            tools_list = get_tools_list(
+                tool_names=[t for t in agent.enabled_tools if t != "mcp"],
+                db=db,
+                user_id=str(user_id),
+                project_id=str(project_id) if project_id else None,
+                agent_id=str(agent_id),
+            )
+            # Async-load MCP tools if requested
+            if "mcp" in agent.enabled_tools:
+                from app.agent.tools.mcp_integration import get_mcp_tools
+                mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+                if mcp_configs:
+                    mcp_tools = await get_mcp_tools(mcp_configs)
+                    tools_list.extend(mcp_tools)
+                else:
+                    logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
+            if tools_list:
+                llm = llm.bind_tools(tools_list)
+
+        messages = [
+            SystemMessage(content=agent.system_prompt),
+            HumanMessage(content=input_text),
+        ]
+
+        # Phase 1: Initial LLM call — accumulate full response to detect tool calls
+        logger.info("🤖 SSE Phase 1: Calling LLM")
+        phase1_response = await llm.ainvoke(messages)
+
+        # Phase 2: Execute tool calls if present
+        if hasattr(phase1_response, 'tool_calls') and phase1_response.tool_calls:
+            logger.info(f"🔧 SSE Phase 2: {len(phase1_response.tool_calls)} tool calls")
+
+            messages.append(AIMessage(
+                content=phase1_response.content or "",
+                tool_calls=phase1_response.tool_calls,
+            ))
+
+            for tool_call in phase1_response.tool_calls:
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("args", {})
+                tool_id = tool_call.get("id")
+
+                yield f'data: {json.dumps({"type": "tool_call", "name": tool_name, "args": tool_args})}\n\n'
+
+                tool_start = datetime.now()
+                try:
+                    tool = _find_tool_by_name(tool_name, tools_list)
+                    if tool:
+                        tool_result = await tool.ainvoke(tool_args)
+                        result_str = json.dumps(tool_result) if isinstance(tool_result, dict) else str(tool_result)
+                        tools_used.append(tool_name)
+                    else:
+                        result_str = json.dumps({"error": f"Tool '{tool_name}' not found"})
+                except Exception as tool_err:
+                    result_str = json.dumps({"error": str(tool_err)})
+
+                duration_ms = int((datetime.now() - tool_start).total_seconds() * 1000)
+                yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
+
+                messages.append(ToolMessage(
+                    content=result_str,
+                    tool_call_id=tool_id,
+                ))
+
+        # Phase 3: Stream final response token by token
+        logger.info("🎯 SSE Phase 3: Streaming final response")
+        full_content = ""
+        async for chunk in llm.astream(messages):
+            if hasattr(chunk, 'content') and chunk.content:
+                full_content += chunk.content
+                yield f'data: {json.dumps({"type": "stream", "content": chunk.content})}\n\n'
+
+        # Persist to DB
+        if conversation_id:
+            from app.services import conversation_service
+            await conversation_service.add_message(
+                db=db,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=full_content,
+                metadata={"model": agent.model_name, "tools_used": tools_used},
+            )
+
+        # Update usage stats
+        from sqlalchemy.sql import func
+        agent.last_used_at = func.now()
+        await db.commit()
+
+        # Track analytics
+        response_time = (datetime.now() - start_time).total_seconds()
+        from app.services.analytics import analytics_service
+        await analytics_service.track_agent_run(
+            db=db,
+            agent_id=agent_id,
+            user_id=user_id,
+            success=True,
+            response_time=response_time,
+            tools_used=tools_used,
+        )
+
+        yield f'data: {json.dumps({"type": "end", "tools_used": tools_used, "model": agent.model_name})}\n\n'
+
+    except Exception as e:
+        logger.error(f"SSE agent error: {e}")
+        # Track failed run
+        response_time = (datetime.now() - start_time).total_seconds()
+        try:
+            from app.services.analytics import analytics_service
+            await analytics_service.track_agent_run(
+                db=db,
+                agent_id=agent_id,
+                user_id=user_id,
+                success=False,
+                response_time=response_time,
+            )
+        except Exception:
+            pass
+        yield f'data: {json.dumps({"type": "error", "error": str(e)})}\n\n'
 
 
 def _find_tool_by_name(name: str, tools: List[BaseTool]) -> Optional[BaseTool]:

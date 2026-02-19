@@ -7,6 +7,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 })
 
 // Request interceptor to add auth token
@@ -33,13 +34,8 @@ api.interceptors.response.use(
       originalRequest._retry = true
 
       try {
-        const refreshToken = localStorage.getItem('refresh_token')
-        if (!refreshToken) {
-          throw new Error('No refresh token')
-        }
-
-        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, {
-          refresh_token: refreshToken,
+        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, {}, {
+          withCredentials: true,
         })
 
         localStorage.setItem('access_token', data.access_token)
@@ -48,7 +44,6 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }

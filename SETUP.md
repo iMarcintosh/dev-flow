@@ -167,75 +167,19 @@ docker compose logs -f backend
 # Press Ctrl+C to stop watching logs
 ```
 
-### Step 5: Verify Database Migrations
+### Step 5: Run Migrations and Create Test User
 
 ```bash
-# Check migration status
-docker compose exec backend alembic current
-
-# Should show latest migration:
-# 76741101c636 (head)
-
-# If not at head, run migrations:
-docker compose exec backend alembic upgrade head
+./scripts/setup-dev.sh
 ```
 
----
+This script:
+1. Runs all pending DB migrations (`alembic upgrade head`)
+2. Creates the test user (skips silently if already exists)
 
-## 👤 Create Test User
-
-### Option A: Via API (Recommended)
-
-```bash
-# Create test user
-curl -X POST http://localhost:8000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@devflow.dev",
-    "password": "testpassword123",
-    "name": "Test User"
-  }'
-```
-
-**Expected response:**
-```json
-{
-  "access_token": "eyJ...",
-  "refresh_token": "eyJ...",
-  "token_type": "bearer"
-}
-```
-
-**Save the access_token** for API testing!
-
-### Option B: Via Database (Alternative)
-
-```bash
-# Connect to PostgreSQL
-docker compose exec postgres psql -U devflow -d devflow
-
-# Create user
-INSERT INTO users (id, email, name, hashed_password, is_active, created_at, updated_at)
-VALUES (
-  gen_random_uuid(),
-  'test@devflow.dev',
-  'Test User',
-  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqJlKLqjPS',  -- password: testpassword123
-  true,
-  NOW(),
-  NOW()
-);
-
-# Exit psql
-\q
-```
-
-### Option C: Via Admin Script (If Available)
-
-```bash
-# Run admin script to create test data
-docker compose exec backend python scripts/create_test_user.py
-```
+**Test credentials:**
+- Email: `test@devflow.dev`
+- Password: `test1234`
 
 ---
 
@@ -267,7 +211,7 @@ http://localhost:5173
 
 **Credentials:**
 - Email: `test@devflow.dev`
-- Password: `testpassword123`
+- Password: `test1234`
 
 **After login, you should see:**
 - Empty Kanban board (4 columns: Backlog, In Progress, Review, Done)
@@ -450,7 +394,7 @@ docker compose exec frontend npm run test:e2e
 ```bash
 TOKEN=$(curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@devflow.dev","password":"testpassword123"}' \
+  -d '{"email":"test@devflow.dev","password":"test1234"}' \
   | jq -r '.access_token')
 
 echo $TOKEN
@@ -716,8 +660,7 @@ Once everything is running:
 - [ ] Add API keys (optional)
 - [ ] Run `docker compose up -d`
 - [ ] Wait for services to start (5-10 min first time)
-- [ ] Run migrations: `alembic upgrade head`
-- [ ] Create test user
+- [ ] Run `./scripts/setup-dev.sh` (migrations + test user)
 - [ ] Login at http://localhost:5173
 - [ ] Create first project
 - [ ] Create first agent

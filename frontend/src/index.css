@@ -48,7 +48,7 @@
 
 /* Starfield Animation */
 @keyframes twinkle {
-  0%, 100% { opacity: 0.3; }
+  0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
 
@@ -68,50 +68,67 @@
 }
 
 .stars-small {
-  background-image: 
+  background-image:
     radial-gradient(2px 2px at 20% 30%, white, transparent),
-    radial-gradient(1px 1px at 60% 70%, white, transparent),
+    radial-gradient(4px 4px at 20% 30%, rgba(255,255,255,0.15), transparent),
+    radial-gradient(1px 1px at 60% 70%, #e9d5ff, transparent),
     radial-gradient(1px 1px at 50% 50%, white, transparent),
-    radial-gradient(1px 1px at 80% 10%, white, transparent),
-    radial-gradient(2px 2px at 90% 60%, white, transparent),
-    radial-gradient(1px 1px at 33% 80%, white, transparent),
-    radial-gradient(1px 1px at 15% 90%, white, transparent);
+    radial-gradient(2px 2px at 80% 10%, #c4b5fd, transparent),
+    radial-gradient(3px 3px at 80% 10%, rgba(196,181,253,0.2), transparent),
+    radial-gradient(1px 1px at 35% 85%, white, transparent),
+    radial-gradient(1px 1px at 15% 90%, #a78bfa, transparent),
+    radial-gradient(1px 1px at 90% 45%, white, transparent),
+    radial-gradient(1px 1px at 70% 25%, #e9d5ff, transparent);
   background-size: 250px 250px;
   animation: twinkle 3s ease-in-out infinite;
 }
 
 .stars-medium {
-  background-image: 
-    radial-gradient(2px 2px at 25% 40%, rgba(255, 255, 255, 0.8), transparent),
-    radial-gradient(1px 1px at 70% 20%, white, transparent),
-    radial-gradient(2px 2px at 45% 75%, rgba(255, 255, 255, 0.7), transparent),
-    radial-gradient(1px 1px at 85% 85%, white, transparent),
-    radial-gradient(1px 1px at 10% 50%, white, transparent);
+  background-image:
+    radial-gradient(3px 3px at 25% 40%, white, transparent),
+    radial-gradient(6px 6px at 25% 40%, rgba(255,255,255,0.12), transparent),
+    radial-gradient(2px 2px at 70% 20%, #c4b5fd, transparent),
+    radial-gradient(3px 3px at 45% 75%, #a78bfa, transparent),
+    radial-gradient(7px 7px at 45% 75%, rgba(167,139,250,0.15), transparent),
+    radial-gradient(2px 2px at 85% 85%, white, transparent),
+    radial-gradient(2px 2px at 10% 50%, #e9d5ff, transparent),
+    radial-gradient(1px 1px at 55% 35%, white, transparent),
+    radial-gradient(2px 2px at 30% 60%, #8b5cf6, transparent);
   background-size: 350px 350px;
   animation: twinkle 5s ease-in-out infinite 1s, gentle-rotate 120s linear infinite;
 }
 
 .stars-large-purple {
-  background-image: 
-    radial-gradient(3px 3px at 30% 25%, #7c3aed, transparent),
-    radial-gradient(2px 2px at 65% 60%, #a78bfa, transparent),
-    radial-gradient(2px 2px at 50% 80%, #7c3aed, transparent),
-    radial-gradient(3px 3px at 15% 45%, #8b5cf6, transparent),
-    radial-gradient(2px 2px at 85% 15%, #a78bfa, transparent);
+  background-image:
+    radial-gradient(4px 4px at 30% 25%, #8b5cf6, transparent),
+    radial-gradient(10px 10px at 30% 25%, rgba(139,92,246,0.2), transparent),
+    radial-gradient(3px 3px at 65% 60%, #a78bfa, transparent),
+    radial-gradient(8px 8px at 65% 60%, rgba(167,139,250,0.15), transparent),
+    radial-gradient(3px 3px at 50% 80%, #7c3aed, transparent),
+    radial-gradient(4px 4px at 15% 45%, #8b5cf6, transparent),
+    radial-gradient(9px 9px at 15% 45%, rgba(139,92,246,0.18), transparent),
+    radial-gradient(5px 5px at 85% 15%, white, transparent),
+    radial-gradient(10px 10px at 85% 15%, rgba(255,255,255,0.1), transparent);
   background-size: 450px 450px;
   animation: twinkle 7s ease-in-out infinite 2s;
 }
 
 .stars-rotating {
-  background-image: 
-    radial-gradient(2px 2px at 40% 35%, #7c3aed, transparent),
-    radial-gradient(1px 1px at 75% 55%, #a78bfa, transparent),
-    radial-gradient(2px 2px at 20% 70%, #8b5cf6, transparent);
+  background-image:
+    radial-gradient(3px 3px at 40% 35%, #8b5cf6, transparent),
+    radial-gradient(8px 8px at 40% 35%, rgba(139,92,246,0.18), transparent),
+    radial-gradient(2px 2px at 75% 55%, #c4b5fd, transparent),
+    radial-gradient(5px 5px at 75% 55%, rgba(196,181,253,0.12), transparent),
+    radial-gradient(3px 3px at 20% 70%, white, transparent),
+    radial-gradient(7px 7px at 20% 70%, rgba(255,255,255,0.08), transparent),
+    radial-gradient(2px 2px at 60% 20%, #a78bfa, transparent),
+    radial-gradient(2px 2px at 90% 80%, #e9d5ff, transparent);
   background-size: 500px 500px;
   animation: twinkle 4s ease-in-out infinite 0.5s, gentle-rotate 200s linear infinite reverse;
 }
 
 /* Custom Scrollbar Styles - GLOBAL */
+html,
 body,
 .overflow-auto,
 .overflow-y-auto,
@@ -120,6 +137,7 @@ body,
   scrollbar-color: #374151 transparent;
 }
 
+html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 .overflow-auto::-webkit-scrollbar,
 .overflow-y-auto::-webkit-scrollbar,
@@ -128,6 +146,7 @@ body::-webkit-scrollbar,
   height: 6px;
 }
 
+html::-webkit-scrollbar-track,
 body::-webkit-scrollbar-track,
 .overflow-auto::-webkit-scrollbar-track,
 .overflow-y-auto::-webkit-scrollbar-track,
@@ -135,6 +154,7 @@ body::-webkit-scrollbar-track,
   background: transparent;
 }
 
+html::-webkit-scrollbar-thumb,
 body::-webkit-scrollbar-thumb,
 .overflow-auto::-webkit-scrollbar-thumb,
 .overflow-y-auto::-webkit-scrollbar-thumb,
@@ -143,6 +163,7 @@ body::-webkit-scrollbar-thumb,
   border-radius: 3px;
 }
 
+html::-webkit-scrollbar-thumb:hover,
 body::-webkit-scrollbar-thumb:hover,
 .overflow-auto::-webkit-scrollbar-thumb:hover,
 .overflow-y-auto::-webkit-scrollbar-thumb:hover,

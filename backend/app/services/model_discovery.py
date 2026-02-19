@@ -50,7 +50,7 @@ class ModelDiscoveryService:
             id="claude-opus-4-6",
             name="Claude Opus 4.6",
             provider="anthropic",
-            description="Most powerful model for highly complex tasks",
+            description="The most intelligent model for building agents and coding",
             context_window=200000,
             cost_tier="highest"
         ),
@@ -58,7 +58,7 @@ class ModelDiscoveryService:
             id="claude-sonnet-4-6",
             name="Claude Sonnet 4.6",
             provider="anthropic",
-            description="Best balance of intelligence and speed",
+            description="The best combination of speed and intelligence",
             context_window=200000,
             cost_tier="high"
         ),
@@ -66,7 +66,7 @@ class ModelDiscoveryService:
             id="claude-haiku-4-5",
             name="Claude Haiku 4.5",
             provider="anthropic",
-            description="Fastest model for simple tasks",
+            description="The fastest model with near-frontier intelligence",
             context_window=200000,
             cost_tier="low"
         ),
@@ -118,23 +118,7 @@ class ModelDiscoveryService:
             context_window=200000,
             cost_tier="highest"
         ),
-        # Legacy models (deprecated but still available)
-        ModelInfo(
-            id="claude-3-opus-20240229",
-            name="Claude 3 Opus (Legacy)",
-            provider="anthropic",
-            description="Legacy Claude 3 Opus",
-            context_window=200000,
-            cost_tier="highest"
-        ),
-        ModelInfo(
-            id="claude-3-sonnet-20240229",
-            name="Claude 3 Sonnet (Legacy)",
-            provider="anthropic",
-            description="Legacy Claude 3 Sonnet",
-            context_window=200000,
-            cost_tier="medium"
-        ),
+        # Legacy models (still available)
         ModelInfo(
             id="claude-3-haiku-20240307",
             name="Claude 3 Haiku",
@@ -146,28 +130,46 @@ class ModelDiscoveryService:
     ]
     
     OPENAI_MODELS_FALLBACK = [
+        # GPT-4.1 family (current, 2025)
         ModelInfo(
-            id="gpt-4-turbo",
-            name="GPT-4 Turbo",
+            id="gpt-4.1",
+            name="GPT-4.1",
             provider="openai",
-            description="Latest GPT-4 model with 128k context",
+            description="Most capable GPT-4.1, great for text and analysis",
+            context_window=1000000,
+            cost_tier="high"
+        ),
+        ModelInfo(
+            id="gpt-4.1-mini",
+            name="GPT-4.1 Mini",
+            provider="openai",
+            description="Smaller, faster GPT-4.1 variant",
+            context_window=1000000,
+            cost_tier="medium"
+        ),
+        ModelInfo(
+            id="gpt-4.1-nano",
+            name="GPT-4.1 Nano",
+            provider="openai",
+            description="Smallest and cheapest GPT-4.1 variant",
+            context_window=1000000,
+            cost_tier="low"
+        ),
+        # GPT-4o (still available)
+        ModelInfo(
+            id="gpt-4o",
+            name="GPT-4o",
+            provider="openai",
+            description="GPT-4o multimodal model",
             context_window=128000,
             cost_tier="high"
         ),
         ModelInfo(
-            id="gpt-4",
-            name="GPT-4",
+            id="gpt-4o-mini",
+            name="GPT-4o Mini",
             provider="openai",
-            description="Standard GPT-4 model",
-            context_window=8192,
-            cost_tier="high"
-        ),
-        ModelInfo(
-            id="gpt-3.5-turbo",
-            name="GPT-3.5 Turbo",
-            provider="openai",
-            description="Fast and affordable model",
-            context_window=16385,
+            description="Fast and affordable GPT-4o variant",
+            context_window=128000,
             cost_tier="low"
         ),
     ]
@@ -198,7 +200,7 @@ class ModelDiscoveryService:
             
             # Filter to chat models only
             models = []
-            chat_model_prefixes = ("gpt-4", "gpt-3.5-turbo")
+            chat_model_prefixes = ("gpt-4", "gpt-3.5-turbo", "gpt-5", "o1", "o3")
             
             for model in data.get("data", []):
                 model_id = model.get("id", "")

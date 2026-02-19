@@ -21,6 +21,7 @@ export interface CustomAgent {
   schedule_enabled: boolean
   last_scheduled_run?: string | null
   next_scheduled_run?: string | null
+  beat_registered: boolean
   
   run_count: number
   star_count: number
@@ -105,6 +106,13 @@ export interface AgentMessage {
   created_at: string
 }
 
+export interface MCPServerConfig {
+  name: string
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
+
 export const AVAILABLE_TOOLS = [
   { id: 'board', name: 'Board Tools', description: 'Create and manage board items' },
   { id: 'web_search', name: 'Web Search', description: 'Search the web for information' },
@@ -112,6 +120,7 @@ export const AVAILABLE_TOOLS = [
   { id: 'code_analysis', name: 'Code Analysis', description: 'Analyze code structure and quality' },
   { id: 'knowledge_base', name: 'Knowledge Base', description: 'Search agent knowledge files' },
   { id: 'git', name: 'Git Operations', description: 'Git commands and repository operations' },
+  { id: 'mcp', name: 'MCP Servers', description: 'Connect external MCP-compatible tool servers' },
 ]
 
 export const DEFAULT_AGENT_ICON = '🤖'

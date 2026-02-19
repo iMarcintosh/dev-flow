@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, Link } from '@tanstack/react-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import { RegisterData } from '@/types'
@@ -28,7 +28,6 @@ export default function RegisterPage() {
       }
       const { data } = await api.post('/api/auth/register', userData)
       
-      localStorage.setItem('refresh_token', data.refresh_token || '')
       setAuth(data.user, data.access_token)
       
       navigate({ to: '/board' })
@@ -130,9 +129,9 @@ export default function RegisterPage() {
           <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground">
               Already have an account?{' '}
-              <a href="/login" className="text-primary hover:underline">
+              <Link to="/login" className="text-primary hover:underline">
                 Sign in
-              </a>
+              </Link>
             </p>
           </div>
           </div>

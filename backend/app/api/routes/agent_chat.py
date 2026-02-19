@@ -5,6 +5,7 @@ API endpoints for Agent Chat (conversations with custom agents).
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -253,3 +254,56 @@ async def send_message(
             },
             "error": str(e),
         }
+
+
+@router.post("/conversations/{conversation_id}/messages/stream")
+async def send_message_stream(
+    conversation_id: UUID,
+    message: str = Query(..., min_length=1, description="User's message"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send a message and stream the agent's response as Server-Sent Events.
+
+    Event types yielded:
+      data: {"type":"start"}
+      data: {"type":"tool_call","name":"...","args":{...}}
+      data: {"type":"tool_result","name":"...","duration_ms":...}
+      data: {"type":"stream","content":"token"}
+      data: {"type":"end","tools_used":[...],"model":"..."}
+      data: {"type":"error","error":"..."}
+    """
+    # Verify conversation exists and user has access
+    conversation = await conversation_service.get_conversation_by_id(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Persist user message immediately
+    await conversation_service.add_message(
+        db=db,
+        conversation_id=conversation_id,
+        role="user",
+        content=message,
+    )
+
+    return StreamingResponse(
+        custom_agent_runner.run_custom_agent_sse(
+            db=db,
+            agent_id=conversation.agent_id,
+            user_id=current_user.id,
+            input_text=message,
+            project_id=conversation.project_id,
+            conversation_id=conversation_id,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
