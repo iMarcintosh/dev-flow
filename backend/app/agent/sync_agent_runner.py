@@ -10,7 +10,7 @@ import json
 
 from app.models.custom_agent import CustomAgent
 from app.models.user import User
-from app.models.analytics import AgentAnalytics
+from app.models.analytics import AgentAnalytics, ToolUsageLog
 from app.database import SessionLocal
 from app.config import settings
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
@@ -126,7 +126,7 @@ def estimate_tokens_from_messages(system_prompt: str, input_text: str, response:
         logger.error(f"Token estimation failed: {e}")
         return None
 
-def track_analytics_sync(db: Session, agent_id: UUID, user_id: UUID, success: bool, response_time: float, tools_count: int = 0, tokens_used: Optional[Dict[str, int]] = None):
+def track_analytics_sync(db: Session, agent_id: UUID, user_id: UUID, success: bool, response_time: float, tools_used: Optional[List[str]] = None, tokens_used: Optional[Dict[str, int]] = None):
     """Track analytics synchronously"""
     try:
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -170,8 +170,17 @@ def track_analytics_sync(db: Session, agent_id: UUID, user_id: UUID, success: bo
         if analytics.max_response_time is None or response_time > analytics.max_response_time:
             analytics.max_response_time = response_time
         
-        analytics.tool_calls_count += tools_count
-        
+        if tools_used:
+            analytics.tool_calls_count += len(tools_used)
+            for tool_name in tools_used:
+                tool_log = ToolUsageLog(
+                    agent_id=agent_id,
+                    user_id=user_id,
+                    tool_name=tool_name,
+                    success=success,
+                )
+                db.add(tool_log)
+
         # Track tokens
         if tokens_used:
             analytics.total_tokens += tokens_used.get('total', 0)
@@ -327,7 +336,7 @@ def run_custom_agent_sync(agent_id: UUID, user_id: UUID, input_text: str) -> Dic
         db.commit()
         
         # Track analytics with tokens
-        track_analytics_sync(db, agent_id, user_id, success=True, response_time=response_time, tools_count=len(tools_used_names), tokens_used=tokens_used)
+        track_analytics_sync(db, agent_id, user_id, success=True, response_time=response_time, tools_used=tools_used_names, tokens_used=tokens_used)
         
         save_scheduled_run_sync(db, agent_id, user_id, "success", input_text, response_content, None, response_time, len(tools_used_names))
         
@@ -342,7 +351,7 @@ def run_custom_agent_sync(agent_id: UUID, user_id: UUID, input_text: str) -> Dic
         error_msg = str(e)
         
         try:
-            track_analytics_sync(db, agent_id, user_id, success=False, response_time=response_time, tools_count=0, tokens_used=None)
+            track_analytics_sync(db, agent_id, user_id, success=False, response_time=response_time, tools_used=None, tokens_used=None)
             save_scheduled_run_sync(db, agent_id, user_id, "failed", input_text, None, error_msg, response_time, 0)
         except:
             pass
