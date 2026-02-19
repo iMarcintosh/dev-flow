@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Float, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, TIMESTAMP
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -27,6 +27,7 @@ class CustomAgent(Base):
     # LLM configuration
     model_name = Column(String(100), nullable=False)
     system_prompt = Column(Text, nullable=False)
+    scheduled_prompt = Column(Text, nullable=True)  # Prompt used for scheduled runs
     temperature = Column(Float, nullable=False, server_default='0.7')
     max_tokens = Column(Integer, nullable=False, server_default='4096')
     top_p = Column(Float, nullable=False, server_default='1.0')
@@ -36,19 +37,19 @@ class CustomAgent(Base):
     tool_config = Column(JSONB, nullable=False, server_default='{}')
     
     # Scheduling
-    trigger = Column(String(20), nullable=False, server_default='manual')  # 'manual', 'chat', 'scheduled'
+    trigger = Column(String(20), nullable=False, server_default='manual')  # 'manual', 'scheduled'
     schedule = Column(String(100), nullable=True)  # Cron format: "0 9 * * *"
     schedule_enabled = Column(Boolean, nullable=False, server_default='true')
-    last_scheduled_run = Column(DateTime, nullable=True)
-    next_scheduled_run = Column(DateTime, nullable=True)
+    last_scheduled_run = Column(TIMESTAMP(timezone=True), nullable=True)
+    next_scheduled_run = Column(TIMESTAMP(timezone=True), nullable=True)
     
     # Stats
     star_count = Column(Integer, nullable=False, server_default='0')  # For marketplace
     install_count = Column(Integer, nullable=False, server_default='0')  # For marketplace
-    last_used_at = Column(DateTime, nullable=True)
+    last_used_at = Column(TIMESTAMP(timezone=True), nullable=True)
     
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
     # Relationships
     user = relationship("User", back_populates="custom_agents")

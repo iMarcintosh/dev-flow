@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     openrouter_api_key: Optional[str] = None
     llm_provider: str = "anthropic"
     
+    # External APIs
+    openweather_api_key: Optional[str] = None
+    
     # Email
     smtp_host: Optional[str] = None
     smtp_port: int = 587

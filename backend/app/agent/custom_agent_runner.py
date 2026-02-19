@@ -5,17 +5,19 @@ Executes custom agents configured by users with their specific
 models, prompts, tools, and parameters.
 """
 
-from typing import Optional, Dict, Any, AsyncGenerator
+from typing import Optional, Dict, Any, AsyncGenerator, List
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import logging
+import json
 
 from app.models.custom_agent import CustomAgent
 from app.agent.model_resolver import create_llm
 from app.agent.tools.tool_registry import bind_tools_to_llm
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
+from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,6 @@ async def run_custom_agent(
     # requests with both temperature AND top_p set
     
     # Bind tools if enabled
-    agent_executor = None
     if agent.enabled_tools:
         logger.info(f"🔧 Binding tools to LLM: {agent.enabled_tools}")
         
@@ -83,24 +84,9 @@ async def run_custom_agent(
         )
         
         if tools:
-            # Try bind_tools first (for OpenAI)
-            if hasattr(llm, 'bind_tools'):
-                llm = llm.bind_tools(tools)
-                logger.info(f"✅ Tools bound using bind_tools()")
-            else:
-                # Use AgentExecutor for models that don't support bind_tools (e.g., Claude)
-                from langchain.agents import initialize_agent, AgentType
-                
-                # Create agent executor with STRUCTURED_CHAT for multi-input tools
-                agent_executor = initialize_agent(
-                    tools=tools,
-                    llm=llm,
-                    agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-                    verbose=True,
-                    handle_parsing_errors=True,
-                    max_iterations=5,
-                )
-                logger.info(f"✅ Created STRUCTURED_CHAT agent with {len(tools)} tools")
+            # All modern LLMs support bind_tools (OpenAI, Anthropic, etc.)
+            llm = llm.bind_tools(tools)
+            logger.info(f"✅ Tools bound using bind_tools() - {len(tools)} tools")
         else:
             logger.warning("⚠️ No tools to bind!")
     
@@ -116,22 +102,93 @@ async def run_custom_agent(
     start_time = datetime.now()
     success = False
     tools_used = []
+    tools_list = []
+    
+    # Get tools list for execution (if enabled)
+    if agent.enabled_tools:
+        from app.agent.tools.tool_registry import get_tools_list
+        tools_list = get_tools_list(
+            tool_names=agent.enabled_tools,
+            db=db,
+            user_id=str(user_id),
+            project_id=str(project_id) if project_id else None,
+            agent_id=str(agent_id),
+        )
     
     try:
-        # Check if we're using AgentExecutor
-        if agent_executor is not None:
-            # Use AgentExecutor - it expects a single input string
-            response_dict = await agent_executor.ainvoke({
-                "input": input_text
-            })
-            # Extract final response
-            response_content = response_dict.get('output', '')
-            success = True
+        # Phase 1: Initial LLM invocation (planning)
+        logger.info(f"🤖 Phase 1: Calling LLM (planning)")
+        response = await llm.ainvoke(messages)
+        
+        # Phase 2: Check if tool calls are requested
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            logger.info(f"🔧 Phase 2: Tool calls detected: {len(response.tool_calls)}")
+            
+            # Add AI message with tool calls
+            messages.append(AIMessage(
+                content=response.content or "",
+                tool_calls=response.tool_calls
+            ))
+            
+            # Execute each tool call
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("args", {})
+                tool_id = tool_call.get("id")
+                
+                logger.info(f"  🛠️  Executing tool: {tool_name} with args: {tool_args}")
+                
+                try:
+                    # Find tool in tools list
+                    tool = _find_tool_by_name(tool_name, tools_list)
+                    
+                    if tool:
+                        # Execute tool
+                        tool_result = await tool.ainvoke(tool_args)
+                        
+                        # Convert result to string if needed
+                        if isinstance(tool_result, dict):
+                            result_str = json.dumps(tool_result)
+                        else:
+                            result_str = str(tool_result)
+                        
+                        logger.info(f"  ✅ Tool result: {result_str[:100]}...")
+                        
+                        # Add to tools_used tracking
+                        tools_used.append(tool_name)
+                        
+                        # Add tool result message
+                        messages.append(ToolMessage(
+                            content=result_str,
+                            tool_call_id=tool_id
+                        ))
+                    else:
+                        error_msg = f"Tool '{tool_name}' not found in enabled tools"
+                        logger.error(f"  ❌ {error_msg}")
+                        messages.append(ToolMessage(
+                            content=json.dumps({"error": error_msg}),
+                            tool_call_id=tool_id
+                        ))
+                        
+                except Exception as tool_error:
+                    error_msg = f"Tool execution error: {str(tool_error)}"
+                    logger.error(f"  ❌ {error_msg}")
+                    messages.append(ToolMessage(
+                        content=json.dumps({"error": error_msg}),
+                        tool_call_id=tool_id
+                    ))
+            
+            # Phase 3: Final LLM call with tool results
+            logger.info(f"🎯 Phase 3: Calling LLM with tool results (finalization)")
+            final_response = await llm.ainvoke(messages)
+            response_content = final_response.content
+            
         else:
-            # Normal LLM invocation
-            response = await llm.ainvoke(messages)
+            # No tool calls - use direct response
+            logger.info(f"💬 No tool calls - using direct response")
             response_content = response.content
-            success = True
+        
+        success = True
         
         # Update usage stats
         from sqlalchemy.sql import func
@@ -283,3 +340,20 @@ async def run_custom_agent_streaming(
         
     except Exception as e:
         yield f"\n\n❌ Error: {str(e)}"
+
+
+def _find_tool_by_name(name: str, tools: List[BaseTool]) -> Optional[BaseTool]:
+    """
+    Find a tool by its name in the tools list.
+    
+    Args:
+        name: Name of the tool to find
+        tools: List of available tools
+    
+    Returns:
+        The tool if found, None otherwise
+    """
+    for tool in tools:
+        if tool.name == name:
+            return tool
+    return None

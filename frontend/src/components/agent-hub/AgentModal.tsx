@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { X, Loader2, AlertCircle } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
+import { toolsService } from '@/services/tools'
 import type { CustomAgent, CustomAgentCreate } from '@/types/custom-agent'
-import { AVAILABLE_TOOLS, DEFAULT_AGENT_ICON } from '@/types/custom-agent'
+import { DEFAULT_AGENT_ICON } from '@/types/custom-agent'
 import { useAvailableModels } from '@/services/queries'
 import ModelSelector from '@/components/settings/ModelSelector'
 import KnowledgeBaseUpload from './KnowledgeBaseUpload'
@@ -31,6 +32,7 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
     visibility: agent?.visibility || ('private' as const),
     model_name: agent?.model_name || 'claude-3-haiku-20240307',
     system_prompt: agent?.system_prompt || 'You are a helpful AI assistant.',
+    scheduled_prompt: agent?.scheduled_prompt || '',
     temperature: agent?.temperature ?? 0.7,
     max_tokens: agent?.max_tokens,
     top_p: agent?.top_p,
@@ -42,6 +44,12 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
 
   // Fetch available models
   const { data: models, isLoading: modelsLoading } = useAvailableModels()
+
+  // Fetch available tools from backend
+  const { data: availableTools = [], isLoading: toolsLoading } = useQuery({
+    queryKey: ['available-tools'],
+    queryFn: toolsService.getAvailableTools,
+  })
 
   const createMutation = useMutation({
     mutationFn: (data: CustomAgentCreate) => customAgentService.createAgent(data),
@@ -409,25 +417,36 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
             <p className="text-sm text-muted-foreground mb-4">
               Select which tools this agent can use when processing requests.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              {AVAILABLE_TOOLS.map((tool) => (
-                <label
-                  key={tool.id}
-                  className="flex items-start gap-3 p-3 bg-background border border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.enabled_tools.includes(tool.id)}
-                    onChange={() => toggleTool(tool.id)}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-foreground text-sm">{tool.name}</div>
-                    <div className="text-xs text-muted-foreground">{tool.description}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            {toolsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {availableTools.map((tool) => (
+                  <label
+                    key={tool.id}
+                    className="flex items-start gap-3 p-3 bg-background border border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.enabled_tools.includes(tool.id)}
+                      onChange={() => toggleTool(tool.id)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-foreground text-sm">{tool.name}</div>
+                      <div className="text-xs text-muted-foreground">{tool.description}</div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                          {tool.category}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
             {formData.enabled_tools.length > 0 && (
               <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
                 <p className="text-sm text-foreground">
@@ -489,6 +508,24 @@ export function AgentModal({ agent, onClose, onSave }: AgentModalProps) {
                     value={formData.schedule}
                     onChange={(cron) => setFormData({ ...formData, schedule: cron })}
                   />
+                </div>
+
+                {/* Scheduled Prompt Field */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Scheduled Prompt
+                    <span className="text-muted-foreground ml-2">(What should the agent do?)</span>
+                  </label>
+                  <textarea
+                    value={formData.scheduled_prompt}
+                    onChange={(e) => setFormData({ ...formData, scheduled_prompt: e.target.value })}
+                    rows={3}
+                    placeholder='z.B. "Wie ist das aktuelle Wetter in Gelnhausen?"'
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono text-sm"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    💡 This prompt will be used every time the agent runs on schedule. Leave empty to use a generic prompt.
+                  </p>
                 </div>
 
                 {agent?.next_scheduled_run && (

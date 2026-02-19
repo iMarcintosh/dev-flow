@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from app.database import Base
 
@@ -15,7 +15,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # user|assistant
     content = Column(Text, nullable=False)
     agent_run_id = Column(UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="chat_messages")
     project = relationship("Project", back_populates="chat_messages")

@@ -5,7 +5,7 @@ Manages available tools that custom agents can use.
 """
 
 from typing import Dict, List, Optional, Any, Callable
-from langchain.tools import Tool, BaseTool
+from langchain_core.tools import Tool, BaseTool
 from langchain_core.language_models import BaseChatModel
 
 
@@ -18,10 +18,16 @@ AVAILABLE_TOOLS: Dict[str, dict] = {
         "functions": ["create_task", "update_status", "add_comment", "assign_item"],
     },
     "web_search": {
-        "name": "Web Search",
-        "description": "Search the internet for information using DuckDuckGo",
+        "name": "Web Search & URL Reading",
+        "description": "Search the web with DuckDuckGo and read content from URLs",
         "category": "research",
-        "functions": ["search", "get_page_content"],
+        "functions": ["web_search", "read_url", "read_url_jina"],
+    },
+    "weather": {
+        "name": "Weather Information",
+        "description": "Get current weather for any location using OpenWeatherMap",
+        "category": "information",
+        "functions": ["get_weather"],
     },
     "code_execution": {
         "name": "Code Execution",
@@ -29,17 +35,17 @@ AVAILABLE_TOOLS: Dict[str, dict] = {
         "category": "development",
         "functions": ["run_python", "run_javascript", "run_bash"],
     },
-    "code_analysis": {
-        "name": "Code Analysis",
-        "description": "Analyze code structure, complexity, and patterns",
-        "category": "development",
-        "functions": ["parse_ast", "check_complexity", "find_patterns"],
-    },
     "knowledge_base": {
         "name": "Knowledge Base Search",
         "description": "Search agent's uploaded knowledge files (RAG)",
         "category": "knowledge",
         "functions": ["search_knowledge"],
+    },
+    "mcp": {
+        "name": "MCP Servers",
+        "description": "Access tools from Model Context Protocol servers (filesystem, GitHub, etc.)",
+        "category": "integration",
+        "functions": ["mcp_tools"],
     },
     "git": {
         "name": "Git Operations",
@@ -215,6 +221,7 @@ def get_tools_list(
     """
     from app.agent.tools.code_execution_tool import code_execution_tool
     from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
+    from app.agent.tools.web_tools import web_search, read_url, read_url_jina, get_weather
     
     import logging
     logger = logging.getLogger(__name__)
@@ -227,7 +234,14 @@ def get_tools_list(
                 tools.extend(create_board_tools(db, user_id, project_id))
         
         elif tool_name == "web_search":
-            tools.append(create_dummy_search_tool())
+            tools.append(web_search)
+            tools.append(read_url)
+            tools.append(read_url_jina)
+            logger.info(f"✅ Added web_search, read_url, read_url_jina tools")
+        
+        elif tool_name == "weather":
+            tools.append(get_weather)
+            logger.info(f"✅ Added get_weather tool")
         
         elif tool_name == "code_execution":
             tools.append(code_execution_tool)
@@ -269,6 +283,7 @@ def bind_tools_to_llm(
     """
     from app.agent.tools.code_execution_tool import code_execution_tool
     from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
+    from app.agent.tools.web_tools import web_search, read_url, read_url_jina, get_weather
     
     import logging
     logger = logging.getLogger(__name__)
@@ -281,7 +296,12 @@ def bind_tools_to_llm(
                 tools.extend(create_board_tools(db, user_id, project_id))
         
         elif tool_name == "web_search":
-            tools.append(create_dummy_search_tool())
+            tools.append(web_search)
+            tools.append(read_url)
+            tools.append(read_url_jina)
+        
+        elif tool_name == "weather":
+            tools.append(get_weather)
         
         elif tool_name == "code_execution":
             tools.append(code_execution_tool)

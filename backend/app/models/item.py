@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, Float, Text, Enum as SQLEnum, event
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import UUID, JSON, TIMESTAMP
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 from app.database import Base
@@ -47,8 +47,8 @@ class Item(Base):
     tags = Column(JSON, default=list)
     position = Column(Float, nullable=False, default=0.0)
     embedding = Column(Vector(1536), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     project = relationship("Project", back_populates="items")

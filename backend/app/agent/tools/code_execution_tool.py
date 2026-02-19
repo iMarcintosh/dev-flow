@@ -4,7 +4,7 @@ Code Execution Tool for Custom Agents
 Allows agents to execute Python, JavaScript, and Bash code
 in isolated Docker containers.
 """
-from langchain.tools import BaseTool
+from langchain_core.tools import BaseTool
 from typing import Optional, Type
 from pydantic import BaseModel, Field
 from app.services.code_execution import code_executor

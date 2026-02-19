@@ -7,6 +7,7 @@ import {
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent } from '@/types/custom-agent'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { formatTime } from '@/utils/dateFormat'
 
 interface AgentCardProps {
   agent: CustomAgent
@@ -160,7 +161,7 @@ export function AgentCard({
               <span className="text-sm font-medium text-primary">Scheduled</span>
               {agent.next_scheduled_run && (
                 <span className="text-xs text-muted-foreground ml-auto">
-                  Next: {new Date(agent.next_scheduled_run).toLocaleTimeString()}
+                  Next: {formatTime(agent.next_scheduled_run)}
                 </span>
               )}
             </div>

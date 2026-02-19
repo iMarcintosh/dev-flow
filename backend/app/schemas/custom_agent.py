@@ -93,6 +93,7 @@ class CustomAgentBase(BaseModel):
     # LLM configuration
     model_name: str = Field(..., min_length=1, max_length=100)
     system_prompt: str = Field(..., min_length=1)
+    scheduled_prompt: Optional[str] = None
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=4096, ge=1, le=128000)
     top_p: Optional[float] = Field(default=1.0, ge=0.0, le=1.0)
@@ -141,6 +142,7 @@ class CustomAgentUpdate(BaseModel):
     
     model_name: Optional[str] = Field(None, min_length=1, max_length=100)
     system_prompt: Optional[str] = Field(None, min_length=1)
+    scheduled_prompt: Optional[str] = None
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(None, ge=1, le=128000)
     top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
@@ -175,7 +177,8 @@ class CustomAgentResponse(CustomAgentBase):
     last_scheduled_run: Optional[datetime]
     next_scheduled_run: Optional[datetime]
     
-    run_count: int
+    # Stats (calculated from analytics)
+    run_count: int = 0
     star_count: int
     install_count: int
     last_used_at: Optional[datetime]

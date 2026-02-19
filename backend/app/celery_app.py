@@ -6,9 +6,8 @@ celery_app = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
     include=[
-        "app.tasks.embedding",
         "app.tasks.agent",
-        "app.agent.memory.indexer",
+        "app.agent.memory.indexer",  # Real embedding tasks
         "app.services.scheduler",  # Include scheduler module
     ]
 )

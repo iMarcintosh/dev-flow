@@ -77,7 +77,7 @@ class TaskCreatorAgent(BaseDevFlowAgent):
         try:
             # Step 1: Classify
             await self.log(run_id, "Step 1/5: Classifying input type...", "info")
-            classification = await self._classify(user_text, input_data.user_id)
+            classification = await self._classify(user_text, input_data.user_id, run_id)
             
             # Step 2: Enrich
             await self.log(run_id, "Step 2/5: Enriching with metadata...", "info")
@@ -110,6 +110,8 @@ class TaskCreatorAgent(BaseDevFlowAgent):
             
         except Exception as e:
             await self.log(run_id, f"Error: {str(e)}", "error")
+            import traceback
+            traceback.print_exc()
             return AgentResult(
                 success=False,
                 output={},
@@ -117,7 +119,7 @@ class TaskCreatorAgent(BaseDevFlowAgent):
                 error=str(e)
             )
     
-    async def _classify(self, text: str, user_id: str) -> Dict[str, Any]:
+    async def _classify(self, text: str, user_id: str, run_id: str) -> Dict[str, Any]:
         """Classify the input type using LLM or fallback to rules."""
         llm = await self._get_llm(user_id)
         
@@ -129,7 +131,7 @@ class TaskCreatorAgent(BaseDevFlowAgent):
 
 Text: {text}
 
-Respond in JSON format:
+Respond ONLY with valid JSON (no markdown, no explanation):
 {{
     "type": "bug|story|epic|task|spike",
     "multiple": true/false,
@@ -147,27 +149,46 @@ Types:
 Multiple: true if text describes several distinct items."""
 
             messages = [
-                SystemMessage(content="You are an expert software project manager classifying development items."),
+                SystemMessage(content="You are an expert software project manager. Respond ONLY with valid JSON, no markdown formatting, no code blocks, no explanation."),
                 HumanMessage(content=prompt)
             ]
             
             response = await llm.ainvoke(messages)
-            result = json.loads(response.content)
-            return result
+            content = response.content.strip()
+            
+            # Remove markdown code blocks if present
+            if content.startswith("```"):
+                lines = content.split("\n")
+                content = "\n".join(lines[1:-1]) if len(lines) > 2 else content
+                if content.startswith("json"):
+                    content = content[4:].strip()
+            
+            # Parse JSON
+            try:
+                result = json.loads(content)
+                return result
+            except json.JSONDecodeError as e:
+                await self.log(run_id, f"Warning: Failed to parse LLM JSON response: {content[:200]}", "warning")
+                # Fallback to rule-based
+                return await self._classify_fallback(text)
         else:
             # Fallback to rule-based classification
-            text_lower = text.lower()
-            
-            if "bug" in text_lower or "error" in text_lower or "broken" in text_lower:
-                return {"type": "bug", "multiple": False, "confidence": 70, "reasoning": "Keyword match"}
-            elif "epic" in text_lower or "feature" in text_lower:
-                return {"type": "epic", "multiple": True, "confidence": 70, "reasoning": "Keyword match"}
-            elif "story" in text_lower or "user" in text_lower:
-                return {"type": "story", "multiple": False, "confidence": 70, "reasoning": "Keyword match"}
-            elif "spike" in text_lower or "research" in text_lower or "investigate" in text_lower:
-                return {"type": "spike", "multiple": False, "confidence": 70, "reasoning": "Keyword match"}
-            else:
-                return {"type": "task", "multiple": "," in text or "\n" in text, "confidence": 50, "reasoning": "Default"}
+            return await self._classify_fallback(text)
+    
+    async def _classify_fallback(self, text: str) -> Dict[str, Any]:
+        """Rule-based classification fallback."""
+        text_lower = text.lower()
+        
+        if "bug" in text_lower or "error" in text_lower or "broken" in text_lower:
+            return {"type": "bug", "multiple": False, "confidence": 70, "reasoning": "Keyword match"}
+        elif "epic" in text_lower or "feature" in text_lower:
+            return {"type": "epic", "multiple": True, "confidence": 70, "reasoning": "Keyword match"}
+        elif "story" in text_lower or "user" in text_lower:
+            return {"type": "story", "multiple": False, "confidence": 70, "reasoning": "Keyword match"}
+        elif "spike" in text_lower or "research" in text_lower or "investigate" in text_lower:
+            return {"type": "spike", "multiple": False, "confidence": 70, "reasoning": "Keyword match"}
+        else:
+            return {"type": "task", "multiple": "," in text or "\n" in text, "confidence": 50, "reasoning": "Default"}
     
     async def _enrich(self, text: str, classification: Dict, user_id: str) -> Dict[str, Any]:
         """Enrich with proper structure using LLM or fallback."""
@@ -181,7 +202,7 @@ Multiple: true if text describes several distinct items."""
 
 Text: {text}
 
-Respond in JSON format:
+Respond ONLY with valid JSON (no markdown, no explanation):
 {{
     "title": "Clear, concise title (max 100 chars)",
     "description": "Detailed description with context",
@@ -192,23 +213,41 @@ Respond in JSON format:
 Make it professional and actionable."""
 
             messages = [
-                SystemMessage(content="You are an expert technical writer creating clear development items."),
+                SystemMessage(content="You are an expert technical writer. Respond ONLY with valid JSON, no markdown formatting, no code blocks, no explanation."),
                 HumanMessage(content=prompt)
             ]
             
             response = await llm.ainvoke(messages)
-            result = json.loads(response.content)
-            return result
+            content = response.content.strip()
+            
+            # Remove markdown code blocks if present
+            if content.startswith("```"):
+                lines = content.split("\n")
+                content = "\n".join(lines[1:-1]) if len(lines) > 2 else content
+                if content.startswith("json"):
+                    content = content[4:].strip()
+            
+            # Parse JSON
+            try:
+                result = json.loads(content)
+                return result
+            except json.JSONDecodeError:
+                # Fallback to simple parsing
+                return self._enrich_fallback(text, classification)
         else:
             # Fallback to simple parsing
-            lines = [line.strip() for line in text.split("\n") if line.strip()]
-            
-            return {
-                "title": lines[0][:100] if lines else text[:100],
-                "description": "\n".join(lines[1:]) if len(lines) > 1 else text,
-                "type": classification["type"],
-                "acceptance_criteria": "- Implement the described functionality\n- Write tests\n- Update documentation"
-            }
+            return self._enrich_fallback(text, classification)
+    
+    def _enrich_fallback(self, text: str, classification: Dict) -> Dict[str, Any]:
+        """Fallback enrichment using simple parsing."""
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        
+        return {
+            "title": lines[0][:100] if lines else text[:100],
+            "description": "\n".join(lines[1:]) if len(lines) > 1 else text,
+            "type": classification["type"],
+            "acceptance_criteria": "- Implement the described functionality\n- Write tests\n- Update documentation"
+        }
     
     async def _breakdown(self, enriched: Dict) -> List[Dict[str, Any]]:
         """Break down into sub-tasks if needed."""

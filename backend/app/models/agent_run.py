@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import UUID, JSON, TIMESTAMP
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 from app.database import Base
@@ -32,10 +32,10 @@ class AgentRun(Base):
     input = Column(JSON, nullable=True)
     output = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    finished_at = Column(DateTime, nullable=True)
+    started_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    finished_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="agent_runs")
     logs = relationship("AgentRunLog", back_populates="agent_run", cascade="all, delete-orphan")
@@ -48,6 +48,6 @@ class AgentRunLog(Base):
     agent_run_id = Column(UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     level = Column(String, nullable=False, default="info")  # info|warning|error
     message = Column(Text, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     agent_run = relationship("AgentRun", back_populates="logs")

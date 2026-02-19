@@ -267,9 +267,20 @@ async def get_marketplace_agents(
         limit: Maximum number of agents to return
     
     Returns:
-        List of public CustomAgent objects
+        List of public CustomAgent objects with run_count populated
     """
-    query = select(CustomAgent).where(CustomAgent.visibility == "public")
+    from app.models.analytics import AgentAnalytics
+    from sqlalchemy import func
+    
+    query = (
+        select(
+            CustomAgent,
+            func.coalesce(func.sum(AgentAnalytics.total_runs), 0).label("run_count")
+        )
+        .outerjoin(AgentAnalytics, CustomAgent.id == AgentAnalytics.agent_id)
+        .where(CustomAgent.visibility == "public")
+        .group_by(CustomAgent.id)
+    )
     
     if category:
         query = query.where(CustomAgent.category == category)
@@ -277,7 +288,14 @@ async def get_marketplace_agents(
     query = query.order_by(CustomAgent.star_count.desc()).limit(limit)
     
     result = await db.execute(query)
-    return list(result.scalars().all())
+    
+    # Add run_count as attribute to each agent
+    agents = []
+    for agent, run_count in result.all():
+        agent.run_count = run_count
+        agents.append(agent)
+    
+    return agents
 
 
 async def clone_agent(

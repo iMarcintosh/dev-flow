@@ -8,6 +8,7 @@ import { AgentCard } from './AgentCard'
 import { AgentModal } from './AgentModal'
 import { AgentDetailsModal } from './AgentDetailsModal'
 import { TemplateGrid } from './TemplateGrid'
+import { EmbeddingRepairDialog } from '@/components/admin/EmbeddingRepairDialog'
 
 type TabType = 'my-agents' | 'templates' | 'marketplace'
 
@@ -77,13 +78,16 @@ export default function AgentHubPage() {
                   Create, manage and discover AI agents
                 </p>
               </div>
-              <button
-                onClick={handleCreateAgent}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-                Create Agent
-              </button>
+              <div className="flex items-center gap-3">
+                <EmbeddingRepairDialog />
+                <button
+                  onClick={handleCreateAgent}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Agent
+                </button>
+              </div>
             </div>
 
             {/* Tabs */}

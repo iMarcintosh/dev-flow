@@ -8,6 +8,7 @@ export interface CustomAgent {
   visibility: 'private' | 'team' | 'public'
   model_name: string
   system_prompt: string
+  scheduled_prompt?: string | null
   temperature: number
   max_tokens?: number | null
   top_p?: number | null
@@ -15,7 +16,7 @@ export interface CustomAgent {
   tool_config?: Record<string, any>
   
   // Scheduling
-  trigger: 'manual' | 'chat' | 'scheduled'
+  trigger: 'manual' | 'scheduled'
   schedule?: string | null
   schedule_enabled: boolean
   last_scheduled_run?: string | null
@@ -41,6 +42,7 @@ export interface CustomAgentCreate {
   visibility?: 'private' | 'team' | 'public'
   model_name: string
   system_prompt: string
+  scheduled_prompt?: string
   temperature?: number
   max_tokens?: number
   top_p?: number
@@ -49,7 +51,7 @@ export interface CustomAgentCreate {
   team_id?: string
   
   // Scheduling
-  trigger?: 'manual' | 'chat' | 'scheduled'
+  trigger?: 'manual' | 'scheduled'
   schedule?: string
   schedule_enabled?: boolean
 }
@@ -61,6 +63,7 @@ export interface CustomAgentUpdate {
   visibility?: 'private' | 'team' | 'public'
   model_name?: string
   system_prompt?: string
+  scheduled_prompt?: string
   temperature?: number
   max_tokens?: number
   top_p?: number

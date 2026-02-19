@@ -1,17 +1,20 @@
 """Sync agent runner with tiktoken token tracking"""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from uuid import UUID, uuid4
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 import logging
+import json
 
 from app.models.custom_agent import CustomAgent
 from app.models.user import User
 from app.models.analytics import AgentAnalytics
 from app.database import SessionLocal
 from app.config import settings
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
+from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -53,28 +56,25 @@ def create_llm_sync(db: Session, model_name: str, user_id: UUID, temperature: fl
     raise ValueError(f"Unsupported provider: {provider}")
 
 def get_tools_sync(agent: CustomAgent, db: Session) -> list:
-    from langchain.tools import Tool
-    from app.agent.tools.code_execution_tool import code_execution_tool
-    from app.agent.tools.knowledge_base_tool import KnowledgeBaseTool
+    """Get tools for agent using the centralized tool registry."""
+    from app.agent.tools.tool_registry import get_tools_list
+    
     tools = []
     if not agent.enabled_tools:
         return tools
-    for tool_name in agent.enabled_tools:
-        try:
-            if tool_name == "web_search":
-                def search(query: str) -> str:
-                    return f"🔍 Wetter-Info für '{query}':\\n\\nMorgen in Gelnhausen: Sonnig, 15°C, leichter Wind aus Südwest. Keine Niederschläge erwartet."
-                tools.append(Tool(name="web_search", description="Search the internet for current weather, news and other information", func=search))
-                logger.info("✅ Added web_search tool")
-            elif tool_name == "code_execution":
-                tools.append(code_execution_tool)
-                logger.info("✅ Added code_execution tool")
-            elif tool_name == "knowledge_base":
-                kb_tool = KnowledgeBaseTool(agent_id=str(agent.id))
-                tools.append(kb_tool)
-                logger.info("✅ Added knowledge_base tool")
-        except Exception as e:
-            logger.error(f"Error loading tool {tool_name}: {e}")
+    
+    try:
+        # Use centralized tool registry (same as custom_agent_runner.py)
+        tools = get_tools_list(agent.enabled_tools)
+        
+        for tool in tools:
+            logger.info(f"✅ Added {tool.name} tool")
+            
+    except Exception as e:
+        logger.error(f"Error loading tools: {e}")
+        import traceback
+        traceback.print_exc()
+    
     return tools
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
@@ -231,53 +231,107 @@ def run_custom_agent_sync(agent_id: UUID, user_id: UUID, input_text: str) -> Dic
         llm = create_llm_sync(db=db, model_name=agent.model_name, user_id=agent.user_id, temperature=agent.temperature, max_tokens=agent.max_tokens or 4096)
         tools = get_tools_sync(agent=agent, db=db)
         tools_count = len(tools)
+        tools_used_names = []
         
         if tools:
-            print(f"🔧 Using agent with {len(tools)} tools")
-            from langchain.agents import initialize_agent, AgentType
+            print(f"🔧 Binding {len(tools)} tools to LLM")
+            llm = llm.bind_tools(tools)
+        
+        print(f"🔄 Phase 1: Calling LLM (planning)...")
+        
+        messages = [SystemMessage(content=agent.system_prompt), HumanMessage(content=input_text)]
+        response = llm.invoke(messages)
+        
+        # Phase 2: Check for tool calls
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            print(f"🔧 Phase 2: Tool calls detected: {len(response.tool_calls)}")
             
-            agent_executor = initialize_agent(
-                tools=tools,
-                llm=llm,
-                agent=AgentType.OPENAI_FUNCTIONS,
-                verbose=True,
-                max_iterations=3
-            )
+            # Add AI message with tool calls
+            messages.append(AIMessage(
+                content=response.content or "",
+                tool_calls=response.tool_calls
+            ))
             
-            print(f"🔄 Running agent executor...")
-            full_input = f"{agent.system_prompt}\\n\\n{input_text}"
-            result = agent_executor.invoke({"input": full_input})
-            response_content = result.get("output", "No output")
+            # Execute each tool call
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("args", {})
+                tool_id = tool_call.get("id")
+                
+                print(f"  🛠️  Executing tool: {tool_name} with args: {tool_args}")
+                
+                try:
+                    # Find tool in tools list
+                    tool = _find_tool_by_name_sync(tool_name, tools)
+                    
+                    if tool:
+                        # Execute tool (synchronously)
+                        tool_result = tool.invoke(tool_args)
+                        
+                        # Convert result to string if needed
+                        if isinstance(tool_result, dict):
+                            result_str = json.dumps(tool_result)
+                        else:
+                            result_str = str(tool_result)
+                        
+                        print(f"  ✅ Tool result: {result_str[:100]}...")
+                        
+                        # Track tool usage
+                        tools_used_names.append(tool_name)
+                        
+                        # Add tool result message
+                        messages.append(ToolMessage(
+                            content=result_str,
+                            tool_call_id=tool_id
+                        ))
+                    else:
+                        error_msg = f"Tool '{tool_name}' not found in enabled tools"
+                        print(f"  ❌ {error_msg}")
+                        messages.append(ToolMessage(
+                            content=json.dumps({"error": error_msg}),
+                            tool_call_id=tool_id
+                        ))
+                        
+                except Exception as tool_error:
+                    error_msg = f"Tool execution error: {str(tool_error)}"
+                    print(f"  ❌ {error_msg}")
+                    import traceback
+                    traceback.print_exc()
+                    messages.append(ToolMessage(
+                        content=json.dumps({"error": error_msg}),
+                        tool_call_id=tool_id
+                    ))
             
-            # Estimate tokens
-            tokens_used = estimate_tokens_from_messages(agent.system_prompt, input_text, response_content, agent.model_name)
+            # Phase 3: Final LLM call with tool results
+            print(f"🎯 Phase 3: Calling LLM with tool results (finalization)")
+            final_response = llm.invoke(messages)
+            response_content = final_response.content
+            
         else:
-            print(f"🔄 Calling LLM (no tools)...")
-            from langchain_core.messages import HumanMessage, SystemMessage
-            
-            messages = [SystemMessage(content=agent.system_prompt), HumanMessage(content=input_text)]
-            response = llm.invoke(messages)
+            # No tool calls - use direct response
+            print(f"💬 No tool calls - using direct response")
             response_content = response.content
-            
-            # Estimate tokens
-            tokens_used = estimate_tokens_from_messages(agent.system_prompt, input_text, response_content, agent.model_name)
+        
+        # Estimate tokens
+        tokens_used = estimate_tokens_from_messages(agent.system_prompt, input_text, response_content, agent.model_name)
         
         success = True
         response_time = (datetime.now() - start_time).total_seconds()
         
         print(f"✅ Done ({response_time:.2f}s)")
         print(f"   Response: {response_content[:200]}...")
+        print(f"   Tools used: {tools_used_names}")
         
         from sqlalchemy.sql import func
         agent.last_used_at = func.now()
         db.commit()
         
         # Track analytics with tokens
-        track_analytics_sync(db, agent_id, user_id, success=True, response_time=response_time, tools_count=tools_count, tokens_used=tokens_used)
+        track_analytics_sync(db, agent_id, user_id, success=True, response_time=response_time, tools_count=len(tools_used_names), tokens_used=tokens_used)
         
-        save_scheduled_run_sync(db, agent_id, user_id, "success", input_text, response_content, None, response_time, tools_count)
+        save_scheduled_run_sync(db, agent_id, user_id, "success", input_text, response_content, None, response_time, len(tools_used_names))
         
-        return {"success": True, "response": response_content, "agent_name": agent.name, "agent_id": str(agent.id), "model": agent.model_name, "response_time": response_time, "tools_used": tools_count}
+        return {"success": True, "response": response_content, "agent_name": agent.name, "agent_id": str(agent.id), "model": agent.model_name, "response_time": response_time, "tools_used": len(tools_used_names)}
         
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -296,3 +350,20 @@ def run_custom_agent_sync(agent_id: UUID, user_id: UUID, input_text: str) -> Dic
         return {"success": False, "error": error_msg, "response_time": response_time}
     finally:
         db.close()
+
+
+def _find_tool_by_name_sync(name: str, tools: List[BaseTool]) -> Optional[BaseTool]:
+    """
+    Find a tool by its name in the tools list (sync version).
+    
+    Args:
+        name: Name of the tool to find
+        tools: List of available tools
+    
+    Returns:
+        The tool if found, None otherwise
+    """
+    for tool in tools:
+        if tool.name == name:
+            return tool
+    return None

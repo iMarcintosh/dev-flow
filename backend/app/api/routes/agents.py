@@ -8,7 +8,6 @@ from app.api.routes.auth import get_current_user
 from app.agent.registry import registry
 from app.agent.base_agent import AgentInput
 from app.services.websocket import manager
-from app.tasks.agent import run_agent_task
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -53,7 +52,7 @@ async def start_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Start an agent run."""
+    """Start an agent run directly (not via Celery)."""
     agent = registry.get(agent_name)
     
     if not agent:
@@ -66,31 +65,55 @@ async def start_agent(
     agent_run = AgentRun(
         agent_name=agent_name,
         trigger=AgentTrigger.MANUAL,
-        status=AgentRunStatus.PENDING,
+        status=AgentRunStatus.RUNNING,
         input={"project_id": request.project_id, "data": request.data},
-        created_by=current_user.id
+        created_by=current_user.id,
+        started_at=datetime.utcnow()
     )
     
     db.add(agent_run)
     await db.commit()
     await db.refresh(agent_run)
     
-    # Start agent task asynchronously
-    run_agent_task.delay(
-        agent_name=agent_name,
-        run_id=str(agent_run.id),
-        input_data={
-            "project_id": request.project_id,
-            "user_id": str(current_user.id),
-            "data": request.data
+    # Execute agent directly in FastAPI (not Celery)
+    try:
+        agent_input = AgentInput(
+            project_id=request.project_id,
+            user_id=str(current_user.id),
+            data=request.data
+        )
+        
+        # Run agent
+        result = await agent.run(agent_input, str(agent_run.id))
+        
+        # Update status
+        agent_run.status = AgentRunStatus.DONE if result.success else AgentRunStatus.FAILED
+        agent_run.output = result.output
+        agent_run.error_message = result.error
+        agent_run.finished_at = datetime.utcnow()
+        await db.commit()
+        
+        return {
+            "run_id": str(agent_run.id),
+            "status": agent_run.status.value,
+            "success": result.success,
+            "output": result.output,
+            "message": f"Agent '{agent_name}' completed"
         }
-    )
-    
-    return {
-        "run_id": str(agent_run.id),
-        "status": agent_run.status.value,
-        "message": f"Agent '{agent_name}' started"
-    }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        
+        agent_run.status = AgentRunStatus.FAILED
+        agent_run.error_message = str(e)
+        agent_run.finished_at = datetime.utcnow()
+        await db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Agent execution failed: {str(e)}"
+        )
 
 
 @router.get("/runs/{run_id}", response_model=AgentRunResponse)

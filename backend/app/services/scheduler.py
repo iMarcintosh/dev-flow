@@ -44,17 +44,25 @@ def calculate_next_run(cron_expression: str, base_time: Optional[datetime] = Non
     
     Args:
         cron_expression: Cron format string
-        base_time: Base time to calculate from (default: now)
+        base_time: Base time to calculate from (default: now UTC)
         
     Returns:
-        Next scheduled run datetime
+        Next scheduled run datetime (timezone-aware UTC)
     """
+    from datetime import timezone
+    
     if not base_time:
-        base_time = datetime.utcnow()
+        base_time = datetime.now(timezone.utc)
     
     try:
         cron = croniter(cron_expression, base_time)
-        return cron.get_next(datetime)
+        next_run = cron.get_next(datetime)
+        
+        # Ensure timezone-aware datetime
+        if next_run.tzinfo is None:
+            next_run = next_run.replace(tzinfo=timezone.utc)
+        
+        return next_run
     except Exception as e:
         raise ValueError(f"Invalid cron expression {cron_expression}: {e}")
 
@@ -235,8 +243,12 @@ def run_custom_agent_scheduled(self, agent_id: str):
         try:
             from app.agent.sync_agent_runner import run_custom_agent_sync
             
-            # Use system prompt as input for scheduled runs
-            input_text = agent.system_prompt
+            # Use scheduled_prompt if available, otherwise fallback to generic message
+            input_text = agent.scheduled_prompt or "Bitte führe deine geplante Aufgabe aus."
+            
+            print(f"🔄 Scheduled run for {agent.name}")
+            print(f"  System Prompt: {agent.system_prompt[:80]}...")
+            print(f"  User Input: {input_text[:80]}...")
             
             result = run_custom_agent_sync(
                 agent_id=UUID(agent_id),

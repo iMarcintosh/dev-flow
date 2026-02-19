@@ -642,3 +642,31 @@ Proprietary - All rights reserved
 - **Web Search** - Real-time web search for up-to-date information
 - **Board Integration** - Create and manage tasks from agents
 
+
+## Recent Updates (2026-02-19)
+
+### Iteration 6: Scheduled Agents & Weather Tool
+
+**New Features:**
+- 🕐 **Scheduled Prompt Field**: Dedicated prompt for scheduled agent runs
+- 🌤️ **Open-Meteo Integration**: Weather data without API keys
+- 🔧 **Tool-Calling Improvements**: 3-phase workflow verified
+- 📝 **TypeScript Types**: Consistent trigger types (manual, scheduled)
+
+**What Changed:**
+```typescript
+// Scheduled agents now have dedicated prompts
+{
+  system_prompt: "Du bist ein Wetter-Assistent...",  // Behavior rules
+  scheduled_prompt: "Wie ist das Wetter in Gelnhausen?"  // Actual question
+}
+```
+
+**Weather Tool:**
+- ❌ Removed: OpenWeather API (required API key)
+- ✅ Added: Open-Meteo API (free, no registration)
+- Real-time weather data for any city
+- German translations included
+
+See [ITERATION-6-STATUS.md](./ITERATION-6-STATUS.md) for full details.
+

@@ -2,9 +2,9 @@
 Analytics Models for tracking usage metrics.
 """
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from app.database import Base
 
@@ -21,7 +21,7 @@ class AgentAnalytics(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     
     # Time period
-    date = Column(DateTime, nullable=False)  # Aggregated by day
+    date = Column(TIMESTAMP(timezone=True), nullable=False)  # Aggregated by day
     
     # Usage metrics
     total_runs = Column(Integer, default=0)
@@ -42,8 +42,8 @@ class AgentAnalytics(Base):
     # Tool usage
     tool_calls_count = Column(Integer, default=0)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     agent = relationship("CustomAgent", backref="analytics")
@@ -65,7 +65,7 @@ class ToolUsageLog(Base):
     success = Column(Boolean, default=True)
     error_message = Column(String, nullable=True)
     
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     # Relationships
     agent = relationship("CustomAgent")

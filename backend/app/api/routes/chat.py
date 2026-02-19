@@ -14,7 +14,6 @@ from app.models.chat import ChatMessage
 from app.agent.registry import registry
 from app.agent.base_agent import AgentInput
 from app.models.agent_run import AgentRun, AgentRunStatus
-from app.tasks.agent import run_agent_task
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 

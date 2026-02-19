@@ -5,7 +5,7 @@ Allows agents to search their knowledge base (uploaded files).
 """
 from typing import Type, Optional
 from pydantic import BaseModel, Field
-from langchain.tools import BaseTool
+from langchain_core.tools import BaseTool
 
 from app.services.knowledge_base import knowledge_base_service
 
