@@ -670,3 +670,26 @@ Proprietary - All rights reserved
 
 See [ITERATION-6-STATUS.md](./ITERATION-6-STATUS.md) for full details.
 
+
+## 🖥️ Setup for New Machine
+
+Moving to a new development machine? See [SETUP.md](./SETUP.md) for a complete guide:
+
+- Prerequisites (Docker, Git, Node.js)
+- Repository setup
+- Environment variables
+- Database initialization
+- Test user creation
+- Verification steps
+- Troubleshooting
+
+**Quick Start:**
+```bash
+git clone https://github.com/iMarcintosh/dev-flow.git
+cd dev-flow
+# Configure backend/.env (see SETUP.md)
+docker compose up -d
+# Create test user (see SETUP.md)
+# Visit http://localhost:5173
+```
+
