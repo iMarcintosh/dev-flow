@@ -154,3 +154,13 @@ export const conversationService = {
     return data
   },
 }
+
+export async function getAgentConversations(
+  agentId: string,
+  limit: number = 20
+): Promise<AgentConversation[]> {
+  const { data } = await api.get(`/api/custom-agents/${agentId}/conversations`, {
+    params: { limit },
+  })
+  return data
+}

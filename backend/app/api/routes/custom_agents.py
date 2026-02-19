@@ -60,19 +60,32 @@ async def list_agents(
 ):
     """
     Get all agents accessible to the current user.
-    
+
     Includes:
     - User's own private agents
     - Team-shared agents (if include_team=true)
     - Public marketplace agents (if include_public=true)
     """
+    from app.api.routes.models import get_redis
+
     agents = await custom_agent_service.get_user_agents(
         db=db,
         user_id=current_user.id,
         include_team=include_team,
         include_public=include_public,
     )
-    return agents
+
+    redis_client = await get_redis()
+    result = []
+    for agent in agents:
+        resp = CustomAgentResponse.model_validate(agent)
+        if agent.trigger == 'scheduled':
+            key = f"devflow:beat:custom-agent-{agent.id}"
+            resp.beat_registered = bool(await redis_client.exists(key))
+        else:
+            resp.beat_registered = True
+        result.append(resp)
+    return result
 
 
 @router.get("/marketplace", response_model=List[CustomAgentResponse])
@@ -191,22 +204,31 @@ async def get_agent(
 ):
     """
     Get a specific agent by ID.
-    
+
     Respects visibility permissions:
     - Private: Only owner
     - Team: Owner + team members
     - Public: Anyone
     """
+    from app.api.routes.models import get_redis
+
     agent = await custom_agent_service.get_agent_by_id(
         db=db,
         agent_id=agent_id,
         user_id=current_user.id,
     )
-    
+
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
-    return agent
+
+    redis_client = await get_redis()
+    resp = CustomAgentResponse.model_validate(agent)
+    if agent.trigger == 'scheduled':
+        key = f"devflow:beat:custom-agent-{agent.id}"
+        resp.beat_registered = bool(await redis_client.exists(key))
+    else:
+        resp.beat_registered = True
+    return resp
 
 
 @router.put("/{agent_id}", response_model=CustomAgentResponse)
@@ -552,3 +574,45 @@ async def get_scheduled_runs(
         ))
     
     return runs
+
+
+class ConversationResult(BaseModel):
+    id: UUID
+    agent_id: UUID
+    user_id: UUID
+    project_id: Optional[UUID]
+    title: Optional[str]
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+@router.get("/{agent_id}/conversations", response_model=List[ConversationResult])
+async def get_agent_conversations(
+    agent_id: UUID,
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(CustomAgent).where(CustomAgent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.visibility == "private" and agent.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    query = text("""
+        SELECT id, agent_id, user_id, project_id, title, message_count,
+               created_at, updated_at
+        FROM agent_conversations
+        WHERE agent_id = :agent_id AND user_id = :user_id
+        ORDER BY updated_at DESC
+        LIMIT :limit
+    """)
+    result = await db.execute(query, {
+        "agent_id": str(agent_id), "user_id": str(current_user.id), "limit": limit
+    })
+    return [ConversationResult(
+        id=r[0], agent_id=r[1], user_id=r[2], project_id=r[3],
+        title=r[4], message_count=r[5], created_at=r[6], updated_at=r[7]
+    ) for r in result.fetchall()]
