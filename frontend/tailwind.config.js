@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 export default {
   darkMode: 'class',
   content: [
@@ -34,9 +36,23 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['Fira Code', 'monospace'],
       },
+      typography: {
+        DEFAULT: {
+          css: {
+            '--tw-prose-invert-body': '#ededed',
+            '--tw-prose-invert-headings': '#ffffff',
+            '--tw-prose-invert-links': '#8b5cf6',
+            '--tw-prose-invert-code': '#ededed',
+            '--tw-prose-invert-pre-bg': '#111111',
+            '--tw-prose-invert-hr': '#262626',
+            '--tw-prose-invert-bullets': '#a1a1aa',
+          },
+        },
+      },
     },
   },
   plugins: [
+    require('@tailwindcss/typography'),
     function({ addUtilities }) {
       addUtilities({
         '.scrollbar-thin::-webkit-scrollbar': {

@@ -434,8 +434,9 @@ async def run_custom_agent_sse(
                     tools_list.extend(mcp_tools)
                 else:
                     logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
-            if tools_list:
-                llm = llm.bind_tools(tools_list)
+        base_llm = llm  # unbound reference — used in Phase 3 to force text response
+        if tools_list:
+            llm = llm.bind_tools(tools_list)
 
         messages = [
             SystemMessage(content=agent.system_prompt),
@@ -485,10 +486,19 @@ async def run_custom_agent_sse(
         # Phase 3: Stream final response token by token
         logger.info("🎯 SSE Phase 3: Streaming final response")
         full_content = ""
-        async for chunk in llm.astream(messages):
-            if hasattr(chunk, 'content') and chunk.content:
-                full_content += chunk.content
-                yield f'data: {json.dumps({"type": "stream", "content": chunk.content})}\n\n'
+
+        if tools_used:
+            # After tool calls: use unbound LLM to force a text-only response (no tool calls possible)
+            final_response = await base_llm.ainvoke(messages)
+            full_content = final_response.content or ""
+            if full_content:
+                yield f'data: {json.dumps({"type": "stream", "content": full_content})}\n\n'
+        else:
+            # No tool calls: stream token by token as before
+            async for chunk in llm.astream(messages):
+                if hasattr(chunk, 'content') and chunk.content:
+                    full_content += chunk.content
+                    yield f'data: {json.dumps({"type": "stream", "content": chunk.content})}\n\n'
 
         # Persist to DB
         if conversation_id:
