@@ -1,0 +1,34 @@
+use_default_settings: true
+
+server:
+  secret_key: "devflow-searxng-secret"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "de-DE"
+  languages:
+    - "de-DE"
+    - "en-US"
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    engine: google
+    disabled: false
+  - name: bing
+    engine: bing
+    disabled: false
+  - name: duckduckgo
+    engine: duckduckgo
+    disabled: false
+
+outgoing:
+  request_timeout: 10.0
+
+ui:
+  infinite_scroll: false

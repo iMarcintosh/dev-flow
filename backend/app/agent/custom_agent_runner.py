@@ -13,10 +13,12 @@ from sqlalchemy import select
 import logging
 import json
 
+from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage, AIMessageChunk
+
 from app.models.custom_agent import CustomAgent
 from app.agent.model_resolver import create_llm
 from app.agent.tools.tool_registry import bind_tools_to_llm
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
@@ -65,49 +67,6 @@ async def run_custom_agent(
         max_tokens=agent.max_tokens,
     )
     
-    # Note: Not setting top_p as both OpenAI and Anthropic reject
-    # requests with both temperature AND top_p set
-    
-    # Bind tools if enabled
-    if agent.enabled_tools:
-        logger.info(f"🔧 Binding tools to LLM: {agent.enabled_tools}")
-
-        from app.agent.tools.tool_registry import get_tools_list
-
-        # Get tools list (exclude "mcp" — loaded separately below)
-        tools = get_tools_list(
-            tool_names=[t for t in agent.enabled_tools if t != "mcp"],
-            db=db,
-            user_id=str(user_id),
-            project_id=str(project_id) if project_id else None,
-            agent_id=str(agent_id),
-        )
-
-        # Async-load MCP tools if requested
-        if "mcp" in agent.enabled_tools:
-            from app.agent.tools.mcp_integration import get_mcp_tools
-            mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
-            if mcp_configs:
-                mcp_tools = await get_mcp_tools(mcp_configs)
-                tools.extend(mcp_tools)
-            else:
-                logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
-
-        if tools:
-            # All modern LLMs support bind_tools (OpenAI, Anthropic, etc.)
-            llm = llm.bind_tools(tools)
-            logger.info(f"✅ Tools bound using bind_tools() - {len(tools)} tools")
-        else:
-            logger.warning("⚠️ No tools to bind!")
-
-    # Create messages with system prompt
-    messages = [
-        SystemMessage(content=agent.system_prompt),
-        HumanMessage(content=input_text),
-    ]
-
-    # TODO: Add conversation history if conversation_id provided
-
     # Execute agent
     start_time = datetime.now()
     success = False
@@ -133,78 +92,34 @@ async def run_custom_agent(
                 tools_list.extend(mcp_tools)
     
     try:
-        # Phase 1: Initial LLM invocation (planning)
-        logger.info(f"🤖 Phase 1: Calling LLM (planning)")
-        response = await llm.ainvoke(messages)
-        
-        # Phase 2: Check if tool calls are requested
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            logger.info(f"🔧 Phase 2: Tool calls detected: {len(response.tool_calls)}")
-            
-            # Add AI message with tool calls
-            messages.append(AIMessage(
-                content=response.content or "",
-                tool_calls=response.tool_calls
-            ))
-            
-            # Execute each tool call
-            for tool_call in response.tool_calls:
-                tool_name = tool_call.get("name")
-                tool_args = tool_call.get("args", {})
-                tool_id = tool_call.get("id")
-                
-                logger.info(f"  🛠️  Executing tool: {tool_name} with args: {tool_args}")
-                
-                try:
-                    # Find tool in tools list
-                    tool = _find_tool_by_name(tool_name, tools_list)
-                    
-                    if tool:
-                        # Execute tool
-                        tool_result = await tool.ainvoke(tool_args)
-                        
-                        # Convert result to string if needed
-                        if isinstance(tool_result, dict):
-                            result_str = json.dumps(tool_result)
-                        else:
-                            result_str = str(tool_result)
-                        
-                        logger.info(f"  ✅ Tool result: {result_str[:100]}...")
-                        
-                        # Add to tools_used tracking
-                        tools_used.append(tool_name)
-                        
-                        # Add tool result message
-                        messages.append(ToolMessage(
-                            content=result_str,
-                            tool_call_id=tool_id
-                        ))
-                    else:
-                        error_msg = f"Tool '{tool_name}' not found in enabled tools"
-                        logger.error(f"  ❌ {error_msg}")
-                        messages.append(ToolMessage(
-                            content=json.dumps({"error": error_msg}),
-                            tool_call_id=tool_id
-                        ))
-                        
-                except Exception as tool_error:
-                    error_msg = f"Tool execution error: {str(tool_error)}"
-                    logger.error(f"  ❌ {error_msg}")
-                    messages.append(ToolMessage(
-                        content=json.dumps({"error": error_msg}),
-                        tool_call_id=tool_id
-                    ))
-            
-            # Phase 3: Final LLM call with tool results
-            logger.info(f"🎯 Phase 3: Calling LLM with tool results (finalization)")
-            final_response = await llm.ainvoke(messages)
-            response_content = final_response.content
-            
-        else:
-            # No tool calls - use direct response
-            logger.info(f"💬 No tool calls - using direct response")
-            response_content = response.content
-        
+        # Build LangGraph agent (tools are bound internally)
+        agent_executor = create_react_agent(llm, tools=tools_list)
+
+        logger.info(f"🤖 Invoking LangGraph agent")
+        result = await agent_executor.ainvoke(
+            {
+                "messages": [
+                    SystemMessage(content=agent.system_prompt),
+                    HumanMessage(content=input_text),
+                ]
+            },
+            config={"recursion_limit": 10},
+        )
+
+        # Extract last AI message as the final response
+        last_ai_msg = next(
+            (m for m in reversed(result["messages"]) if isinstance(m, AIMessage)),
+            None,
+        )
+        response_content = _extract_text_content(last_ai_msg.content) if last_ai_msg else ""
+
+        # Collect tool names from message history
+        tools_used = [
+            m.name
+            for m in result["messages"]
+            if isinstance(m, ToolMessage) and getattr(m, "name", None)
+        ]
+
         success = True
         
         # Update usage stats
@@ -434,71 +349,86 @@ async def run_custom_agent_sse(
                     tools_list.extend(mcp_tools)
                 else:
                     logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
-        base_llm = llm  # unbound reference — used in Phase 3 to force text response
-        if tools_list:
-            llm = llm.bind_tools(tools_list)
+        # Build LangGraph agent — tools are bound internally, pass unbound LLM
+        agent_executor = create_react_agent(llm, tools=tools_list)
 
-        messages = [
+        messages_input = [
             SystemMessage(content=agent.system_prompt),
             HumanMessage(content=input_text),
         ]
 
-        # Phase 1: Initial LLM call — accumulate full response to detect tool calls
-        logger.info("🤖 SSE Phase 1: Calling LLM")
-        phase1_response = await llm.ainvoke(messages)
-
-        # Phase 2: Execute tool calls if present
-        if hasattr(phase1_response, 'tool_calls') and phase1_response.tool_calls:
-            logger.info(f"🔧 SSE Phase 2: {len(phase1_response.tool_calls)} tool calls")
-
-            messages.append(AIMessage(
-                content=phase1_response.content or "",
-                tool_calls=phase1_response.tool_calls,
-            ))
-
-            for tool_call in phase1_response.tool_calls:
-                tool_name = tool_call.get("name")
-                tool_args = tool_call.get("args", {})
-                tool_id = tool_call.get("id")
-
-                yield f'data: {json.dumps({"type": "tool_call", "name": tool_name, "args": tool_args})}\n\n'
-
-                tool_start = datetime.now()
-                try:
-                    tool = _find_tool_by_name(tool_name, tools_list)
-                    if tool:
-                        tool_result = await tool.ainvoke(tool_args)
-                        result_str = json.dumps(tool_result) if isinstance(tool_result, dict) else str(tool_result)
-                        tools_used.append(tool_name)
-                    else:
-                        result_str = json.dumps({"error": f"Tool '{tool_name}' not found"})
-                except Exception as tool_err:
-                    result_str = json.dumps({"error": str(tool_err)})
-
-                duration_ms = int((datetime.now() - tool_start).total_seconds() * 1000)
-                yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
-
-                messages.append(ToolMessage(
-                    content=result_str,
-                    tool_call_id=tool_id,
-                ))
-
-        # Phase 3: Stream final response token by token
-        logger.info("🎯 SSE Phase 3: Streaming final response")
+        logger.info("🤖 SSE: Starting LangGraph agent stream")
         full_content = ""
+        # tool_call_chunks accumulator: id -> {name, args_str, start_time}
+        pending_tool_calls: dict = {}
+        # Track ToolMessage IDs already emitted to suppress duplicate chunks
+        emitted_tool_results: set = set()
 
-        if tools_used:
-            # After tool calls: use unbound LLM to force a text-only response (no tool calls possible)
-            final_response = await base_llm.ainvoke(messages)
-            full_content = final_response.content or ""
-            if full_content:
-                yield f'data: {json.dumps({"type": "stream", "content": full_content})}\n\n'
-        else:
-            # No tool calls: stream token by token as before
-            async for chunk in llm.astream(messages):
-                if hasattr(chunk, 'content') and chunk.content:
-                    full_content += chunk.content
-                    yield f'data: {json.dumps({"type": "stream", "content": chunk.content})}\n\n'
+        async for msg, metadata in agent_executor.astream(
+            {"messages": messages_input},
+            stream_mode="messages",
+            config={"recursion_limit": 10},
+        ):
+            if isinstance(msg, AIMessageChunk):
+                # Accumulate tool-call chunks (name + args arrive in separate chunks)
+                if msg.tool_call_chunks:
+                    for chunk in msg.tool_call_chunks:
+                        # Use index as stable key — id only appears in the first chunk
+                        idx = str(chunk.get("index", "0"))
+                        tool_id = chunk.get("id") or ""
+                        name = chunk.get("name") or ""
+                        args_str = chunk.get("args") or ""
+
+                        if idx not in pending_tool_calls:
+                            pending_tool_calls[idx] = {
+                                "tool_id": tool_id,
+                                "name": name,
+                                "args_str": args_str,
+                                "start_time": datetime.now(),
+                            }
+                        else:
+                            if tool_id:
+                                pending_tool_calls[idx]["tool_id"] = tool_id
+                            if name:
+                                pending_tool_calls[idx]["name"] = name
+                            pending_tool_calls[idx]["args_str"] += args_str
+
+                # Final text stream (no tool calls in this chunk)
+                elif msg.content:
+                    text = _extract_text_content(msg.content)
+                    if text:
+                        full_content += text
+                        yield f'data: {json.dumps({"type": "stream", "content": text})}\n\n'
+
+            elif isinstance(msg, ToolMessage):
+                tool_call_id = getattr(msg, "tool_call_id", None) or ""
+                # Suppress duplicate ToolMessage chunks for the same call
+                if tool_call_id in emitted_tool_results:
+                    continue
+                emitted_tool_results.add(tool_call_id)
+
+                # Find the pending entry whose tool_id matches this ToolMessage's tool_call_id
+                matched_idx = next(
+                    (idx for idx, info in pending_tool_calls.items()
+                     if info["tool_id"] == tool_call_id),
+                    None,
+                )
+                if matched_idx is not None:
+                    info = pending_tool_calls.pop(matched_idx)
+                    tool_name = info["name"] or getattr(msg, "name", None) or "unknown"
+                    try:
+                        args_parsed = json.loads(info["args_str"]) if info["args_str"] else {}
+                    except Exception:
+                        args_parsed = {}
+                    duration_ms = int((datetime.now() - info["start_time"]).total_seconds() * 1000)
+                    yield f'data: {json.dumps({"type": "tool_call", "name": tool_name, "args": args_parsed})}\n\n'
+                else:
+                    tool_name = getattr(msg, "name", None) or "unknown"
+                    duration_ms = 0
+
+                if tool_name not in tools_used:
+                    tools_used.append(tool_name)
+                yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
 
         # Persist to DB
         if conversation_id:
@@ -549,17 +479,20 @@ async def run_custom_agent_sse(
 
 
 def _find_tool_by_name(name: str, tools: List[BaseTool]) -> Optional[BaseTool]:
-    """
-    Find a tool by its name in the tools list.
-    
-    Args:
-        name: Name of the tool to find
-        tools: List of available tools
-    
-    Returns:
-        The tool if found, None otherwise
-    """
+    """Find a tool by its name in the tools list."""
     for tool in tools:
         if tool.name == name:
             return tool
     return None
+
+
+def _extract_text_content(content) -> str:
+    """Extract plain text from LLM content — handles str and Anthropic list format."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return ''.join(
+            block.get('text', '') if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    return str(content) if content else ''
