@@ -65,12 +65,12 @@ export function MessageList({
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {messages.length === 0 && !isStreaming && (
-        <div className="text-center py-12">
-          <Bot className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-          <p className="text-muted-foreground">Start a conversation!</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Ask me anything or request help with your tasks.
-          </p>
+        <div className="text-center py-16">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-violet-600/20 to-purple-800/20 border border-primary/20 flex items-center justify-center">
+            <Bot className="w-8 h-8 text-primary/50" />
+          </div>
+          <p className="text-foreground font-medium">Start a conversation</p>
+          <p className="text-sm text-muted-foreground mt-1">Ask me anything or request help with your tasks.</p>
         </div>
       )}
 
@@ -84,9 +84,9 @@ export function MessageList({
       )}
 
       {hasError && !isStreaming && (
-        <div className="flex gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-accent">
-            <Bot className="w-4 h-4 text-foreground" />
+        <div className="flex gap-3 animate-message-in">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-600 to-purple-800">
+            <Bot className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 max-w-[70%]">
             <div className="rounded-lg px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
@@ -121,17 +121,19 @@ function MessageBubble({ message }: MessageBubbleProps) {
   }, [])
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex gap-3 ${isUser ? 'animate-user-message-fly-in flex-row-reverse' : 'animate-message-in'}`}>
       {/* Avatar */}
       <div
         className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-          isUser ? 'bg-primary' : 'bg-accent'
+          isUser
+            ? 'bg-primary'
+            : 'bg-gradient-to-br from-violet-600 to-purple-800'
         }`}
       >
         {isUser ? (
           <User className="w-4 h-4 text-primary-foreground" />
         ) : (
-          <Bot className="w-4 h-4 text-foreground" />
+          <Bot className="w-4 h-4 text-white" />
         )}
       </div>
 
@@ -245,34 +247,40 @@ function StreamingMessageBubble({ content, activeTools }: StreamingMessageBubble
   const showThinking = activeTools.length === 0 && !content
 
   return (
-    <div className="flex gap-3">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-accent">
-        <Bot className="w-4 h-4 text-foreground" />
+    <div className="flex gap-3 animate-message-in">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-600 to-purple-800 animate-pulse-soft">
+        <Bot className="w-4 h-4 text-white" />
       </div>
 
       <div className="flex-1 max-w-[70%] flex flex-col">
         <div className="rounded-lg px-4 py-3 bg-card border border-border text-foreground">
           {/* Tool badges */}
           {activeTools.length > 0 && (
-            <div className="space-y-1.5 mb-3">
-              {activeTools.map((tool, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  {tool.done ? (
-                    <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                  ) : (
-                    <Loader className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
-                  )}
-                  <span className="mr-1">{TOOL_ICONS[tool.name] ?? '🔧'}</span>
-                  <span className={tool.done ? 'text-muted-foreground' : 'text-foreground'}>
-                    {tool.done ? tool.name : `${tool.name}...`}
-                  </span>
-                  {tool.done && tool.duration_ms !== undefined && (
-                    <span className="text-xs text-muted-foreground ml-1">
-                      {(tool.duration_ms / 1000).toFixed(1)}s
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {activeTools.map((tool, i) =>
+                tool.done ? (
+                  <div
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-green-500/10 border border-green-500/30 text-green-400 transition-all"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
+                    <span>{tool.name}</span>
+                    {tool.duration_ms !== undefined && (
+                      <span className="opacity-60">{(tool.duration_ms / 1000).toFixed(1)}s</span>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-primary/10 border border-primary/30 text-primary animate-pulse-border"
+                  >
+                    <Loader className="w-3 h-3 animate-spin" />
+                    <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
+                    <span>{tool.name}</span>
+                  </div>
+                )
+              )}
             </div>
           )}
 
@@ -280,13 +288,13 @@ function StreamingMessageBubble({ content, activeTools }: StreamingMessageBubble
           {content ? (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-              <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-middle" />
+              <span className="inline-block w-0.5 h-[1em] bg-primary animate-cursor ml-0.5 align-text-bottom" />
             </div>
           ) : showThinking ? (
-            <div className="flex gap-1.5 items-center">
-              <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" />
+            <div className="flex items-center gap-2 py-2">
+              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-1 inline-block" />
+              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-2 inline-block" />
+              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-3 inline-block" />
             </div>
           ) : null}
         </div>

@@ -64,6 +64,13 @@ export default function AgentChatPage() {
     setChatError(false)
   }
 
+  const handleStop = () => {
+    abortRef.current?.abort()
+    setIsStreaming(false)
+    setStreamingContent('')
+    setActiveTools([])
+  }
+
   const handleDeleteConversation = (conversationId: string) => {
     if (conversationId === selectedConversationId) {
       const otherConversations = conversations.filter((c) => c.id !== conversationId)
@@ -211,7 +218,12 @@ export default function AgentChatPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-3">
-              <span className="text-3xl">{agent.icon}</span>
+              <div className="relative">
+                <span className="text-3xl">{agent.icon}</span>
+                {isStreaming && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
+                )}
+              </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">{agent.name}</h1>
                 <p className="text-sm text-muted-foreground">{agent.description}</p>
@@ -246,6 +258,7 @@ export default function AgentChatPage() {
                   onError={setChatError}
                   isStreaming={isStreaming}
                   onSendMessage={sendMessage}
+                  onStop={handleStop}
                 />
               </>
             ) : (

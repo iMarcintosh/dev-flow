@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.analytics import AgentAnalytics, ToolUsageLog
 from app.database import SessionLocal
 from app.config import settings
+from app.agent.utils import _collect_token_usage
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
@@ -321,8 +322,10 @@ def run_custom_agent_sync(agent_id: UUID, user_id: UUID, input_text: str) -> Dic
             print(f"💬 No tool calls - using direct response")
             response_content = response.content
         
-        # Estimate tokens
-        tokens_used = estimate_tokens_from_messages(agent.system_prompt, input_text, response_content, agent.model_name)
+        # Prefer real token counts from API; fall back to tiktoken estimation
+        tokens_used = _collect_token_usage(messages)
+        if tokens_used is None:
+            tokens_used = estimate_tokens_from_messages(agent.system_prompt, input_text, response_content, agent.model_name)
         
         success = True
         response_time = (datetime.now() - start_time).total_seconds()

@@ -14,14 +14,18 @@ import logging
 import json
 
 from langgraph.prebuilt import create_react_agent
+from langgraph.errors import GraphRecursionError
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage, AIMessageChunk
 
 from app.models.custom_agent import CustomAgent
 from app.agent.model_resolver import create_llm
 from app.agent.tools.tool_registry import bind_tools_to_llm
+from app.agent.utils import _collect_token_usage
 from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
+
+_LANGGRAPH_RECURSION_MSG = "Sorry, need more steps to process this request."
 
 
 async def run_custom_agent(
@@ -363,12 +367,24 @@ async def run_custom_agent_sse(
         pending_tool_calls: dict = {}
         # Track ToolMessage IDs already emitted to suppress duplicate chunks
         emitted_tool_results: set = set()
+        # Track the final state to extract the complete AI response after tool calls
+        final_state_messages: list = []
 
-        async for msg, metadata in agent_executor.astream(
+        async for event in agent_executor.astream(
             {"messages": messages_input},
-            stream_mode="messages",
+            stream_mode=["messages", "values"],
             config={"recursion_limit": 10},
         ):
+            mode, data = event
+
+            if mode == "values":
+                # State snapshot — keep the latest for final answer extraction
+                final_state_messages = data.get("messages", [])
+                continue
+
+            # mode == "messages": data is (msg, metadata)
+            msg, metadata = data
+
             if isinstance(msg, AIMessageChunk):
                 # Accumulate tool-call chunks (name + args arrive in separate chunks)
                 if msg.tool_call_chunks:
@@ -430,6 +446,38 @@ async def run_custom_agent_sse(
                     tools_used.append(tool_name)
                 yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
 
+        # Extract final answer from the state snapshot if stream missed it
+        # This happens when the last AI response after tool calls comes as a complete AIMessage
+        # rather than streaming AIMessageChunk events
+        from langchain_core.messages import AIMessage as LCAIMessage
+        if final_state_messages:
+            last_msg = final_state_messages[-1]
+            if isinstance(last_msg, LCAIMessage):
+                final_text = _extract_text_content(last_msg.content) if last_msg.content else ""
+                if _LANGGRAPH_RECURSION_MSG in final_text:
+                    logger.warning("⚠️ Agent hit recursion limit (detected in final state)")
+                    user_msg = ("Der Agent hat das maximale Limit an Tool-Aufrufen erreicht. "
+                                "Bitte stelle eine spezifischere Frage.")
+                    yield f'data: {json.dumps({"type": "stream", "content": user_msg})}\n\n'
+                    full_content = (full_content + "\n\n" + user_msg).strip() if full_content else user_msg
+                else:
+                    if final_text and final_text != full_content:
+                        # The final answer is more complete than what was streamed
+                        if final_text.startswith(full_content):
+                            # Append only the missing suffix
+                            additional = final_text[len(full_content):]
+                        else:
+                            # Completely different — use the full final text
+                            additional = final_text
+                        if additional:
+                            yield f'data: {json.dumps({"type": "stream", "content": additional})}\n\n'
+                        full_content = final_text
+
+        logger.info(f"🤖 SSE: Stream complete, full_content length={len(full_content)}")
+
+        # Collect real token usage from all AIMessage turns
+        tokens_used = _collect_token_usage(final_state_messages)
+
         # Persist to DB
         if conversation_id:
             from app.services import conversation_service
@@ -456,8 +504,25 @@ async def run_custom_agent_sse(
             success=True,
             response_time=response_time,
             tools_used=tools_used,
+            tokens_used=tokens_used,
         )
 
+        yield f'data: {json.dumps({"type": "end", "tools_used": tools_used, "model": agent.model_name})}\n\n'
+
+    except GraphRecursionError:
+        logger.warning("⚠️ Agent hit GraphRecursionError")
+        user_msg = ("Der Agent hat das maximale Limit an Tool-Aufrufen erreicht. "
+                    "Bitte stelle eine spezifischere Frage.")
+        suffix = ("\n\n" + user_msg) if full_content else user_msg
+        full_content = (full_content + suffix).strip()
+        yield f'data: {json.dumps({"type": "stream", "content": suffix.strip()})}\n\n'
+        if conversation_id:
+            from app.services import conversation_service
+            await conversation_service.add_message(
+                db=db, conversation_id=conversation_id, role="assistant",
+                content=full_content,
+                metadata={"model": agent.model_name, "tools_used": tools_used},
+            )
         yield f'data: {json.dumps({"type": "end", "tools_used": tools_used, "model": agent.model_name})}\n\n'
 
     except Exception as e:
