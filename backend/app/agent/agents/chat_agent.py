@@ -159,10 +159,14 @@ class ChatAgent(BaseDevFlowAgent):
         if items:
             parts.append("# Relevant Items:\n")
             for idx, item in enumerate(items[:5], 1):
-                parts.append(f"{idx}. [{item.type.value.upper()}] {item.title}")
+                parts.append(f"{idx}. [{item.type.value.upper()}] {item.title} (ID: {item.id})")
                 parts.append(f"   Status: {item.status.value}, Priority: {item.priority.value}")
+                if item.created_by:
+                    parts.append(f"   Created by: {item.created_by}, Created: {item.created_at.strftime('%Y-%m-%d')}, Updated: {item.updated_at.strftime('%Y-%m-%d')}")
                 if item.description:
-                    parts.append(f"   {item.description[:200]}...")
+                    parts.append(f"   Description: {item.description[:300]}")
+                if item.acceptance_criteria:
+                    parts.append(f"   Acceptance Criteria: {item.acceptance_criteria[:500]}")
                 parts.append("")
         
         # Recent conversation

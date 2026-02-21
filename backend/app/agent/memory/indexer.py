@@ -29,7 +29,9 @@ def index_item_task(item_id: str):
             item_type=item.type,
             title=item.title,
             description=item.description,
-            acceptance_criteria=item.acceptance_criteria
+            acceptance_criteria=item.acceptance_criteria,
+            status=item.status.value,
+            priority=item.priority.value
         )
         
         # Generate embedding (use asyncio.run for async function)
@@ -67,7 +69,9 @@ def index_all_project_items_task(project_id: str):
                 item_type=item.type,
                 title=item.title,
                 description=item.description,
-                acceptance_criteria=item.acceptance_criteria
+                acceptance_criteria=item.acceptance_criteria,
+                status=item.status.value,
+                priority=item.priority.value
             )
             for item in items
         ]

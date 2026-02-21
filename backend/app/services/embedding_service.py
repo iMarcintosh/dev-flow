@@ -60,21 +60,29 @@ class EmbeddingService:
         return [data.embedding for data in response.data]
     
     def format_item_for_embedding(
-        self, 
+        self,
         item_type: str,
-        title: str, 
+        title: str,
         description: str | None = None,
-        acceptance_criteria: str | None = None
+        acceptance_criteria: str | None = None,
+        status: str | None = None,
+        priority: str | None = None
     ) -> str:
         """Format item fields into a single text for embedding."""
         parts = [f"{item_type}: {title}"]
-        
+
+        if status:
+            parts.append(f"Status: {status}")
+
+        if priority:
+            parts.append(f"Priority: {priority}")
+
         if description:
             parts.append(description)
-        
+
         if acceptance_criteria:
             parts.append(f"Acceptance Criteria: {acceptance_criteria}")
-        
+
         return "\n".join(parts)
 
 

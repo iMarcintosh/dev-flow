@@ -34,16 +34,15 @@ class VectorStore:
         if not item:
             return
         
-        # Build text to embed: type + title + description + acceptance_criteria
-        parts = [
-            f"{item.type.value.upper()}: {item.title}",
-        ]
-        if item.description:
-            parts.append(item.description)
-        if item.acceptance_criteria:
-            parts.append(f"Acceptance Criteria: {item.acceptance_criteria}")
-        
-        text = "\n".join(parts)
+        # Build text to embed using embedding service for consistent formatting
+        text = embedding_service.format_item_for_embedding(
+            item_type=item.type.value.upper(),
+            title=item.title,
+            description=item.description,
+            acceptance_criteria=item.acceptance_criteria,
+            status=item.status.value,
+            priority=item.priority.value
+        )
         
         # Generate embedding
         embedding = await embedding_service.embed_text(text)

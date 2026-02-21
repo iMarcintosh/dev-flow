@@ -17,6 +17,7 @@ from app.models.chat import ChatMessage
 from app.agent.registry import registry
 from app.agent.base_agent import AgentInput
 from app.models.agent_run import AgentRun, AgentRunStatus
+from app.api.routes.items import verify_project_access
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +61,14 @@ async def send_chat_message(
     - Provide project statistics
     - Reference specific items
     """
+    # Verify project access
+    await verify_project_access(uuid.UUID(request.project_id), current_user, db)
+
     # Get chat agent
     agent = registry.get("chat_agent")
     if not agent:
         raise HTTPException(status_code=500, detail="Chat agent not available")
-    
+
     # Create agent run
     run = AgentRun(
         agent_name=agent.name,
@@ -114,6 +118,9 @@ async def send_chat_message_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """Stream chat response as SSE."""
+    # Verify project access before streaming
+    await verify_project_access(uuid.UUID(request.project_id), current_user, db)
+
     agent = registry.get("chat_agent")
     if not agent:
         raise HTTPException(status_code=500, detail="Chat agent not available")
