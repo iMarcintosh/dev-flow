@@ -30,7 +30,7 @@ export default function RegisterPage() {
       
       setAuth(data.user, data.access_token)
       
-      navigate({ to: '/board' })
+      navigate({ to: '/board', search: { project_id: undefined } })
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed')
     } finally {

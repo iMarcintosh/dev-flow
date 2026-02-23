@@ -22,10 +22,18 @@ from app.agent.model_resolver import create_llm
 from app.agent.tools.tool_registry import bind_tools_to_llm
 from app.agent.utils import _collect_token_usage
 from langchain_core.tools import BaseTool
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 _LANGGRAPH_RECURSION_MSG = "Sorry, need more steps to process this request."
+
+
+def _get_postgres_conn_string() -> str:
+    """Convert asyncpg URL to psycopg3 format for LangGraph checkpointer."""
+    url = settings.database_url
+    # postgresql+asyncpg://user:pass@host:port/db → postgresql://user:pass@host:port/db
+    return url.replace("postgresql+asyncpg://", "postgresql://")
 
 
 async def run_custom_agent(
@@ -333,6 +341,20 @@ async def run_custom_agent_sse(
             max_tokens=agent.max_tokens,
         )
 
+        # Resolve project_id: use conversation's project, fall back to user's first project
+        resolved_project_id = project_id
+        if not resolved_project_id and agent.enabled_tools and "board" in agent.enabled_tools:
+            from app.models.project import Project
+            proj_result = await db.execute(
+                select(Project).where(Project.owner_id == user_id).limit(1)
+            )
+            first_project = proj_result.scalar_one_or_none()
+            if first_project:
+                resolved_project_id = first_project.id
+                logger.info(f"📋 Board tool: resolved project_id to {resolved_project_id}")
+            else:
+                logger.warning("⚠️ Board tool enabled but no project found for user")
+
         # Get tools list
         tools_list: List[BaseTool] = []
         if agent.enabled_tools:
@@ -341,7 +363,7 @@ async def run_custom_agent_sse(
                 tool_names=[t for t in agent.enabled_tools if t != "mcp"],
                 db=db,
                 user_id=str(user_id),
-                project_id=str(project_id) if project_id else None,
+                project_id=str(resolved_project_id) if resolved_project_id else None,
                 agent_id=str(agent_id),
             )
             # Async-load MCP tools if requested
@@ -353,11 +375,12 @@ async def run_custom_agent_sse(
                     tools_list.extend(mcp_tools)
                 else:
                     logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
-        # Build LangGraph agent — tools are bound internally, pass unbound LLM
-        agent_executor = create_react_agent(llm, tools=tools_list)
+        # Build LangGraph agent with Postgres checkpointer for native conversation memory
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langchain_core.messages import AIMessage as LCAIMessage
 
         messages_input = [
-            SystemMessage(content=agent.system_prompt),
+            SystemMessage(content=agent.system_prompt or ""),
             HumanMessage(content=input_text),
         ]
 
@@ -370,86 +393,97 @@ async def run_custom_agent_sse(
         # Track the final state to extract the complete AI response after tool calls
         final_state_messages: list = []
 
-        async for event in agent_executor.astream(
-            {"messages": messages_input},
-            stream_mode=["messages", "values"],
-            config={"recursion_limit": 10},
-        ):
-            mode, data = event
+        # The async with block must wrap the entire stream so the checkpointer
+        # connection stays open during all astream iterations.
+        async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+            await checkpointer.setup()  # idempotent: CREATE TABLE IF NOT EXISTS
 
-            if mode == "values":
-                # State snapshot — keep the latest for final answer extraction
-                final_state_messages = data.get("messages", [])
-                continue
+            agent_executor = create_react_agent(llm, tools=tools_list, checkpointer=checkpointer)
 
-            # mode == "messages": data is (msg, metadata)
-            msg, metadata = data
+            run_config = {
+                "recursion_limit": 10,
+                "configurable": {"thread_id": str(conversation_id) if conversation_id else str(agent_id)},
+            }
 
-            if isinstance(msg, AIMessageChunk):
-                # Accumulate tool-call chunks (name + args arrive in separate chunks)
-                if msg.tool_call_chunks:
-                    for chunk in msg.tool_call_chunks:
-                        # Use index as stable key — id only appears in the first chunk
-                        idx = str(chunk.get("index", "0"))
-                        tool_id = chunk.get("id") or ""
-                        name = chunk.get("name") or ""
-                        args_str = chunk.get("args") or ""
+            async for event in agent_executor.astream(
+                {"messages": messages_input},
+                stream_mode=["messages", "values"],
+                config=run_config,
+            ):
+                mode, data = event
 
-                        if idx not in pending_tool_calls:
-                            pending_tool_calls[idx] = {
-                                "tool_id": tool_id,
-                                "name": name,
-                                "args_str": args_str,
-                                "start_time": datetime.now(),
-                            }
-                        else:
-                            if tool_id:
-                                pending_tool_calls[idx]["tool_id"] = tool_id
-                            if name:
-                                pending_tool_calls[idx]["name"] = name
-                            pending_tool_calls[idx]["args_str"] += args_str
-
-                # Final text stream (no tool calls in this chunk)
-                elif msg.content:
-                    text = _extract_text_content(msg.content)
-                    if text:
-                        full_content += text
-                        yield f'data: {json.dumps({"type": "stream", "content": text})}\n\n'
-
-            elif isinstance(msg, ToolMessage):
-                tool_call_id = getattr(msg, "tool_call_id", None) or ""
-                # Suppress duplicate ToolMessage chunks for the same call
-                if tool_call_id in emitted_tool_results:
+                if mode == "values":
+                    # State snapshot — keep the latest for final answer extraction
+                    final_state_messages = data.get("messages", [])
                     continue
-                emitted_tool_results.add(tool_call_id)
 
-                # Find the pending entry whose tool_id matches this ToolMessage's tool_call_id
-                matched_idx = next(
-                    (idx for idx, info in pending_tool_calls.items()
-                     if info["tool_id"] == tool_call_id),
-                    None,
-                )
-                if matched_idx is not None:
-                    info = pending_tool_calls.pop(matched_idx)
-                    tool_name = info["name"] or getattr(msg, "name", None) or "unknown"
-                    try:
-                        args_parsed = json.loads(info["args_str"]) if info["args_str"] else {}
-                    except Exception:
-                        args_parsed = {}
-                    duration_ms = int((datetime.now() - info["start_time"]).total_seconds() * 1000)
-                    yield f'data: {json.dumps({"type": "tool_call", "name": tool_name, "args": args_parsed})}\n\n'
-                else:
-                    tool_name = getattr(msg, "name", None) or "unknown"
-                    duration_ms = 0
+                # mode == "messages": data is (msg, metadata)
+                msg, metadata = data
 
-                if tool_name not in tools_used:
-                    tools_used.append(tool_name)
-                yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
+                if isinstance(msg, AIMessageChunk):
+                    # Accumulate tool-call chunks (name + args arrive in separate chunks)
+                    if msg.tool_call_chunks:
+                        for chunk in msg.tool_call_chunks:
+                            # Use index as stable key — id only appears in the first chunk
+                            idx = str(chunk.get("index", "0"))
+                            tool_id = chunk.get("id") or ""
+                            name = chunk.get("name") or ""
+                            args_str = chunk.get("args") or ""
+
+                            if idx not in pending_tool_calls:
+                                pending_tool_calls[idx] = {
+                                    "tool_id": tool_id,
+                                    "name": name,
+                                    "args_str": args_str,
+                                    "start_time": datetime.now(),
+                                }
+                            else:
+                                if tool_id:
+                                    pending_tool_calls[idx]["tool_id"] = tool_id
+                                if name:
+                                    pending_tool_calls[idx]["name"] = name
+                                pending_tool_calls[idx]["args_str"] += args_str
+
+                    # Final text stream (no tool calls in this chunk)
+                    elif msg.content:
+                        text = _extract_text_content(msg.content)
+                        if text:
+                            full_content += text
+                            yield f'data: {json.dumps({"type": "stream", "content": text})}\n\n'
+
+                elif isinstance(msg, ToolMessage):
+                    tool_call_id = getattr(msg, "tool_call_id", None) or ""
+                    # Suppress duplicate ToolMessage chunks for the same call
+                    if tool_call_id in emitted_tool_results:
+                        continue
+                    emitted_tool_results.add(tool_call_id)
+
+                    # Find the pending entry whose tool_id matches this ToolMessage's tool_call_id
+                    matched_idx = next(
+                        (idx for idx, info in pending_tool_calls.items()
+                         if info["tool_id"] == tool_call_id),
+                        None,
+                    )
+                    if matched_idx is not None:
+                        info = pending_tool_calls.pop(matched_idx)
+                        tool_name = info["name"] or getattr(msg, "name", None) or "unknown"
+                        try:
+                            args_parsed = json.loads(info["args_str"]) if info["args_str"] else {}
+                        except Exception:
+                            args_parsed = {}
+                        duration_ms = int((datetime.now() - info["start_time"]).total_seconds() * 1000)
+                        yield f'data: {json.dumps({"type": "tool_call", "name": tool_name, "args": args_parsed})}\n\n'
+                    else:
+                        tool_name = getattr(msg, "name", None) or "unknown"
+                        duration_ms = 0
+
+                    if tool_name not in tools_used:
+                        tools_used.append(tool_name)
+                    yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
 
         # Extract final answer from the state snapshot if stream missed it
         # This happens when the last AI response after tool calls comes as a complete AIMessage
         # rather than streaming AIMessageChunk events
-        from langchain_core.messages import AIMessage as LCAIMessage
         if final_state_messages:
             last_msg = final_state_messages[-1]
             if isinstance(last_msg, LCAIMessage):

@@ -32,7 +32,11 @@ langchain-community
 langchain-openai
 langchain-anthropic
 langgraph
+langgraph-checkpoint-postgres
 langchain-text-splitters
+
+# psycopg3 — required by langgraph-checkpoint-postgres (psycopg2-binary kept for Celery/SQLAlchemy)
+psycopg[binary,pool]
 
 # Vector DB - Updated chromadb
 pgvector==0.2.4

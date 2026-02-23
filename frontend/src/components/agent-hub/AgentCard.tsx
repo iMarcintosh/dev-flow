@@ -6,6 +6,7 @@ import {
   Activity, Cpu, Search, Code, FileText, Trello, AlertTriangle
 } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
+import { useProjects } from '@/services/queries'
 import type { CustomAgent } from '@/types/custom-agent'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { formatTime } from '@/utils/dateFormat'
@@ -30,6 +31,8 @@ export function AgentCard({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const navigate = useNavigate()
+  const { data: projects } = useProjects()
+  const defaultProjectId = projects?.[0]?.id
 
   const deleteMutation = useMutation({
     mutationFn: () => customAgentService.deleteAgent(agent.id),
@@ -58,7 +61,7 @@ export function AgentCard({
 
   const handleChat = (e: React.MouseEvent) => {
     e.stopPropagation()
-    navigate({ to: '/chat', search: { agent_id: agent.id } })
+    navigate({ to: '/chat', search: { agent_id: agent.id, conversation_id: undefined, project_id: defaultProjectId } })
   }
 
   const handleInstall = (e: React.MouseEvent) => {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useProjectItems, useProjects, useCreateProject } from '@/services/queries'
+import { useSearch, useNavigate } from '@tanstack/react-router'
 import KanbanBoard from './KanbanBoard'
 import ItemDetailModal from '@/components/cards/ItemDetailModal'
 import AgentInputModal from '@/components/agent-hub/AgentInputModal'
@@ -16,8 +17,11 @@ export default function BoardPage() {
   const [projectDescription, setProjectDescription] = useState('')
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const createProject = useCreateProject()
-  const currentProject = projects?.[0] // For now, use first project
-  
+  const navigate = useNavigate()
+  const search = useSearch({ from: '/board' })
+  const projectIdFromUrl = search.project_id
+  const currentProject = projects?.find(p => p.id === projectIdFromUrl) ?? projects?.[0]
+
   const { data: items, isLoading: itemsLoading } = useProjectItems(currentProject?.id)
 
   if (projectsLoading || itemsLoading) {
@@ -33,10 +37,11 @@ export default function BoardPage() {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!projectName.trim()) return
-    await createProject.mutateAsync({ name: projectName.trim(), description: projectDescription.trim() || undefined })
+    const newProject = await createProject.mutateAsync({ name: projectName.trim(), description: projectDescription.trim() || undefined })
     setShowCreateModal(false)
     setProjectName('')
     setProjectDescription('')
+    navigate({ to: '/board', search: { project_id: newProject.id } })
   }
 
   if (!currentProject) {

@@ -237,6 +237,12 @@ async def delete_conversation(
     await db.delete(conversation)
     await db.commit()
 
+    # Delete LangGraph checkpoint history for this conversation (thread_id = conversation_id)
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from app.agent.custom_agent_runner import _get_postgres_conn_string
+    async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+        await checkpointer.adelete_thread(str(conversation_id))
+
 
 async def update_conversation_title(
     db: AsyncSession,

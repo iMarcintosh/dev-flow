@@ -4,6 +4,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { conversationService, customAgentService } from '@/services/custom-agents'
+import { useProjects } from '@/services/queries'
 import { ConversationList } from './ConversationList'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
@@ -18,6 +19,10 @@ export default function AgentChatPage() {
 
   const agentId = (search as any).agent_id as string | undefined
   const conversationIdFromUrl = (search as any).conversation_id as string | undefined
+  const projectIdFromUrl = (search as any).project_id as string | undefined
+
+  const { data: projects } = useProjects()
+  const defaultProjectId = projectIdFromUrl ?? projects?.[0]?.id
 
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>(
     conversationIdFromUrl
@@ -47,7 +52,7 @@ export default function AgentChatPage() {
   }, [conversations, selectedConversationId])
 
   const createConversationMutation = useMutation({
-    mutationFn: () => conversationService.createConversation(agentId!),
+    mutationFn: () => conversationService.createConversation(agentId!, defaultProjectId),
     onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
       setSelectedConversationId(newConversation.id)

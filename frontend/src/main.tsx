@@ -40,6 +40,9 @@ const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/board',
   component: BoardPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    project_id: search.project_id as string | undefined,
+  }),
 })
 
 const agentsRoute = createRoute({
@@ -52,6 +55,11 @@ const chatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/chat',
   component: AgentChatPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    agent_id: search.agent_id as string | undefined,
+    conversation_id: search.conversation_id as string | undefined,
+    project_id: search.project_id as string | undefined,
+  }),
 })
 
 const settingsRoute = createRoute({
