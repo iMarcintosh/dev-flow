@@ -121,6 +121,7 @@ export const AVAILABLE_TOOLS = [
   { id: 'knowledge_base', name: 'Knowledge Base', description: 'Search agent knowledge files' },
   { id: 'git', name: 'Git Operations', description: 'Git commands and repository operations' },
   { id: 'mcp', name: 'MCP Servers', description: 'Connect external MCP-compatible tool servers' },
+  { id: 'notebook', name: 'Notebook Search', description: "Search user's personal notes and snippets" },
 ]
 
 export const DEFAULT_AGENT_ICON = '🤖'

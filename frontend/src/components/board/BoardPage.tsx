@@ -6,6 +6,7 @@ import ItemDetailModal from '@/components/cards/ItemDetailModal'
 import AgentInputModal from '@/components/agent-hub/AgentInputModal'
 import ChatWidget from '@/components/chatbot/ChatWidget'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { Item } from '@/types'
 import { Loader2, Sparkles, FolderPlus } from 'lucide-react'
 
@@ -122,7 +123,7 @@ export default function BoardPage() {
     <AppLayout>
       <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-card">
+      <PageHeader>
         <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">{currentProject.name}</h1>
@@ -138,7 +139,7 @@ export default function BoardPage() {
             AI Task Creator
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Board */}
       <div className="max-w-7xl mx-auto p-8 h-[calc(100vh-8rem)]">

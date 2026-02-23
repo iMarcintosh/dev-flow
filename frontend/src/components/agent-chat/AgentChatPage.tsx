@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { conversationService, customAgentService } from '@/services/custom-agents'
 import { useProjects } from '@/services/queries'
 import { ConversationList } from './ConversationList'
@@ -229,28 +230,30 @@ export default function AgentChatPage() {
   return (
     <AppLayout>
       <div className="h-screen bg-background flex flex-col">
-        <div className="border-b border-border bg-card px-6 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate({ to: '/agents' })}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <span className="text-3xl">{agent.icon}</span>
-                {isStreaming && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
-                )}
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{agent.name}</h1>
-                <p className="text-sm text-muted-foreground">{agent.description}</p>
+        <PageHeader>
+          <div className="px-6 py-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate({ to: '/agents' })}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <span className="text-3xl">{agent.icon}</span>
+                  {isStreaming && (
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
+                  )}
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">{agent.name}</h1>
+                  <p className="text-sm text-muted-foreground">{agent.description}</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </PageHeader>
 
         <div className="flex-1 flex overflow-hidden">
           <ConversationList

@@ -533,18 +533,12 @@ async def get_scheduled_runs(
     
     Returns recent scheduled executions with results.
     """
-    # Verify agent access
-    result = await db.execute(
-        select(CustomAgent).where(CustomAgent.id == agent_id)
+    # Verify agent access using service layer (handles private/team/public visibility)
+    agent = await custom_agent_service.get_agent_by_id(
+        db, agent_id, user_id=current_user.id
     )
-    agent = result.scalar_one_or_none()
-    
     if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Check access (owner or team member for team agents)
-    if agent.visibility == "private" and agent.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=404, detail="Agent not found or access denied")
     
     # Fetch runs
     query = text("""

@@ -48,6 +48,12 @@ AVAILABLE_TOOLS: Dict[str, dict] = {
         "category": "integration",
         "functions": ["mcp_tools"],
     },
+    "notebook": {
+        "name": "Notebook Search",
+        "description": "Search user's personal notes and code snippets in the Developer Notebook",
+        "category": "knowledge",
+        "functions": ["search_notebook"],
+    },
     "git": {
         "name": "Git Operations",
         "description": "Read git history, diffs, commits, and branches",
@@ -285,7 +291,16 @@ def get_tools_list(
                 logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
             else:
                 logger.warning(f"⚠️ knowledge_base tool requested but no agent_id provided")
-    
+
+        elif tool_name == "notebook":
+            if user_id:
+                from app.agent.tools.notebook_tool import NotebookTool
+                notebook_tool = NotebookTool(user_id=str(user_id))
+                tools.append(notebook_tool)
+                logger.info(f"✅ Added notebook tool for user {user_id}")
+            else:
+                logger.warning(f"⚠️ notebook tool requested but no user_id provided")
+
     logger.info(f"📦 Prepared {len(tools)} tools: {[t.name for t in tools]}")
     return tools
 
@@ -345,7 +360,16 @@ def bind_tools_to_llm(
                 logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
             else:
                 logger.warning(f"⚠️ knowledge_base tool requested but no agent_id provided")
-    
+
+        elif tool_name == "notebook":
+            if user_id:
+                from app.agent.tools.notebook_tool import NotebookTool
+                notebook_tool = NotebookTool(user_id=str(user_id))
+                tools.append(notebook_tool)
+                logger.info(f"✅ Added notebook tool for user {user_id}")
+            else:
+                logger.warning(f"⚠️ notebook tool requested but no user_id provided")
+
     if not tools:
         logger.warning("⚠️ No tools to bind!")
         return llm

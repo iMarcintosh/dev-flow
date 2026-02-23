@@ -238,6 +238,8 @@ async def get_chat_history(
     db: AsyncSession = Depends(get_db)
 ):
     """Get chat history for a project."""
+    await verify_project_access(uuid.UUID(project_id), current_user, db)
+
     stmt = (
         select(ChatMessage)
         .where(ChatMessage.project_id == project_id)

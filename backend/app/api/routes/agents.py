@@ -226,7 +226,10 @@ async def get_agent_runs(
     """Get run history for a specific agent."""
     stmt = (
         select(AgentRun)
-        .where(AgentRun.agent_name == agent_name)
+        .where(
+            AgentRun.agent_name == agent_name,
+            AgentRun.created_by == current_user.id,
+        )
         .order_by(AgentRun.created_at.desc())
         .limit(limit)
     )
@@ -245,7 +248,16 @@ async def get_run_logs(
 ):
     """Get logs for a specific agent run."""
     from app.models.agent_run import AgentRunLog
-    
+
+    run_result = await db.execute(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.created_by == current_user.id,
+        )
+    )
+    if not run_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Run not found")
+
     stmt = (
         select(AgentRunLog)
         .where(AgentRunLog.agent_run_id == run_id)

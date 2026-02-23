@@ -9,6 +9,7 @@ celery_app = Celery(
     include=[
         "app.tasks.agent",
         "app.agent.memory.indexer",  # Real embedding tasks
+        "app.agent.memory.note_indexer",  # Note indexing tasks
         "app.services.scheduler",  # Include scheduler module
     ]
 )

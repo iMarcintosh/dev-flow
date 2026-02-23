@@ -60,10 +60,11 @@ app.include_router(custom_agents.router)
 app.include_router(agent_chat.router)
 app.include_router(teams.router)
 
-from app.api.routes import knowledge_base, websocket, analytics
+from app.api.routes import knowledge_base, websocket, analytics, notes
 app.include_router(knowledge_base.router)
 app.include_router(websocket.router)
 app.include_router(analytics.router)
+app.include_router(notes.router)
 
 
 @app.on_event("startup")
