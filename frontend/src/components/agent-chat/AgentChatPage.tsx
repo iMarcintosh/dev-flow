@@ -7,6 +7,7 @@ import { conversationService, customAgentService } from '@/services/custom-agent
 import { ConversationList } from './ConversationList'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
+import type { AgentMessage } from '@/types/custom-agent'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -91,6 +92,20 @@ export default function AgentChatPage() {
     setStreamingContent('')
     setActiveTools([])
     setChatError(false)
+
+    // Optimistically add the user message to the cache so it shows immediately
+    const optimisticMessage: AgentMessage = {
+      id: crypto.randomUUID(),
+      conversation_id: selectedConversationId,
+      role: 'user',
+      content: text,
+      message_metadata: {},
+      created_at: new Date().toISOString(),
+    }
+    queryClient.setQueryData(
+      ['conversation-messages', selectedConversationId],
+      (old: AgentMessage[] = []) => [...old, optimisticMessage]
+    )
 
     try {
       const token = localStorage.getItem('access_token')

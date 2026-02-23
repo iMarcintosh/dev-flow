@@ -203,6 +203,12 @@ Visit http://localhost:8000/docs for full interactive API documentation (Swagger
 - `PATCH /api/teams/{id}/members/{user_id}` - Update member role
 - `DELETE /api/teams/{id}/members/{user_id}` - Remove member
 
+**Agent Chat:**
+- `POST /api/agent-chat/conversations` - Create conversation
+- `GET /api/agent-chat/conversations` - List conversations
+- `POST /api/agent-chat/conversations/{id}/messages/stream` - Stream message (SSE)
+- `GET /api/agent-chat/conversations/{id}/messages` - Get message history
+
 **WebSocket:**
 - `WS /ws/agent-chat/{agent_id}?token={jwt}` - Real-time agent chat
 
@@ -601,8 +607,7 @@ Proprietary - All rights reserved
 - ✅ Per-User API Keys
 
 ### In Progress 🚧
-- 🚧 Analytics Dashboard UI
-- 🚧 WebSocket Chat Integration (Frontend)
+- 🚧 Agent Chat bug fixes (optimistic updates, newest messages)
 
 ### Planned 📋
 - 📋 Agent Marketplace
@@ -620,55 +625,29 @@ Proprietary - All rights reserved
 
 ## 🎨 Recent Updates
 
-### Agent Hub UI Improvements (2026-02-18)
-- **Modern Card Design** - Icon-based statistics without text labels for cleaner look
-- **Diagonal Shine Effect** - Elegant hover animation with 400ms delay and soft blur
-- **Fixed Layout** - Consistent 420px card height with flex layout
-- **Enhanced UX** - Action buttons in top-right, chat button always at bottom
-- **Token Tracking** - Accurate token counting for scheduled agents using tiktoken
+### Agent Chat Bug Fixes (2026-02-23)
+- **Optimistic Updates** - User message appears immediately in UI without waiting for server
+- **Newest Messages First** - Long conversations now show the most recent 100 messages (not oldest)
+- `conversation_service.py`: query now orders DESC + limit, then reverses for chronological display
+- `AgentChatPage.tsx`: user message inserted into TanStack Query cache before streaming starts
+
+### Agent Chat (2026-02-21)
+- **SSE Streaming** - Real-time token-by-token responses via Server-Sent Events
+- **Conversation Management** - Multiple conversations per agent with sidebar
+- **Tool Status UI** - Live display of active tool calls with timing
+- **Token Tracking** - Prompt + completion tokens shown in chat
+- **JWT Auth** - Access token passed as query param for stream endpoint
+
+### Scheduled Agents & Weather Tool (2026-02-19)
+- **Scheduled Prompt Field** - Dedicated prompt for scheduled agent runs
+- **Open-Meteo Integration** - Free weather API, no key needed
+- **Trigger Types Simplified** - Only `manual` and `scheduled` (chat trigger removed)
+
+### Agent Hub UI & Analytics (2026-02-18)
+- **Modern Card Design** - Icon-based stats, diagonal shine hover effect
+- **Token Tracking** - Accurate counting with tiktoken (prompt + completion)
 - **Scheduled Runs UI** - Complete execution history with expandable details
-- **Better Analytics** - Visibility-based access control and detailed breakdowns
-
-### Scheduled Agents (2026-02-17)
-- **Cron Scheduling** - Run agents automatically on custom schedules
-- **Preset Schedules** - Hourly, daily, weekly, monthly, weekdays presets
-- **Next Run Preview** - See when agent will execute next
-- **Manual Trigger** - Run scheduled agents on-demand
-- **Execution History** - Track all scheduled runs with status and logs
-
-### Custom Agent Tools (2026-02-16)
-- **Knowledge Base** - RAG with local embeddings, no OpenAI required
-- **Code Execution** - Python, JavaScript, Bash in secure Docker containers
-- **Web Search** - Real-time web search for up-to-date information
-- **Board Integration** - Create and manage tasks from agents
-
-
-## Recent Updates (2026-02-19)
-
-### Iteration 6: Scheduled Agents & Weather Tool
-
-**New Features:**
-- 🕐 **Scheduled Prompt Field**: Dedicated prompt for scheduled agent runs
-- 🌤️ **Open-Meteo Integration**: Weather data without API keys
-- 🔧 **Tool-Calling Improvements**: 3-phase workflow verified
-- 📝 **TypeScript Types**: Consistent trigger types (manual, scheduled)
-
-**What Changed:**
-```typescript
-// Scheduled agents now have dedicated prompts
-{
-  system_prompt: "Du bist ein Wetter-Assistent...",  // Behavior rules
-  scheduled_prompt: "Wie ist das Wetter in Gelnhausen?"  // Actual question
-}
-```
-
-**Weather Tool:**
-- ❌ Removed: OpenWeather API (required API key)
-- ✅ Added: Open-Meteo API (free, no registration)
-- Real-time weather data for any city
-- German translations included
-
-See [ITERATION-6-STATUS.md](./ITERATION-6-STATUS.md) for full details.
+- **Visibility-based Analytics** - Private agents show only owner data
 
 
 ## 🖥️ Setup for New Machine
