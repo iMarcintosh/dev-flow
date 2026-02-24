@@ -143,7 +143,7 @@ Trigger types: `manual`, `scheduled` (note: `chat` trigger was removed in iterat
 
 **Item types** — `epic | story | bug | task | spike`
 
-**pgvector** — First migration must `CREATE EXTENSION IF NOT EXISTS vector`. Embeddings use local `sentence-transformers` (no OpenAI key needed). SQLAlchemy event listeners auto-trigger Celery embedding tasks on item changes.
+**pgvector** — First migration must `CREATE EXTENSION IF NOT EXISTS vector`. Embeddings use OpenAI `text-embedding-3-small` (requires OPENAI_API_KEY). Indexing is triggered explicitly after `await db.commit()` in routes and tools.
 
 **Code execution** — Docker SDK runs sandboxed containers (Python 3.11, Node.js 20, Bash). No network access, 128MB RAM, 50% CPU, 30s timeout.
 

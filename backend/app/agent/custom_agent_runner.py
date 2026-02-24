@@ -105,13 +105,14 @@ async def run_custom_agent(
     
     try:
         # Build LangGraph agent (tools are bound internally)
-        agent_executor = create_react_agent(llm, tools=tools_list)
+        # Pass system_prompt via prompt= so it's injected as a pre-prompt by the
+        # framework and NOT stored in the thread history (avoids accumulation).
+        agent_executor = create_react_agent(llm, tools=tools_list, prompt=agent.system_prompt or "")
 
         logger.info(f"🤖 Invoking LangGraph agent")
         result = await agent_executor.ainvoke(
             {
                 "messages": [
-                    SystemMessage(content=agent.system_prompt),
                     HumanMessage(content=input_text),
                 ]
             },
@@ -380,7 +381,6 @@ async def run_custom_agent_sse(
         from langchain_core.messages import AIMessage as LCAIMessage
 
         messages_input = [
-            SystemMessage(content=agent.system_prompt or ""),
             HumanMessage(content=input_text),
         ]
 
@@ -398,7 +398,15 @@ async def run_custom_agent_sse(
         async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
             await checkpointer.setup()  # idempotent: CREATE TABLE IF NOT EXISTS
 
-            agent_executor = create_react_agent(llm, tools=tools_list, checkpointer=checkpointer)
+            # Pass system_prompt via prompt= so it's injected by the framework
+            # and NOT stored in the Postgres thread history (avoids accumulation
+            # of duplicate SystemMessages across turns).
+            agent_executor = create_react_agent(
+                llm,
+                tools=tools_list,
+                prompt=agent.system_prompt or "",
+                checkpointer=checkpointer,
+            )
 
             run_config = {
                 "recursion_limit": 10,

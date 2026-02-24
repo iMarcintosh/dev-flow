@@ -71,7 +71,9 @@ async def create_item(
     db.add(new_item)
     await db.commit()
     await db.refresh(new_item)
-    
+    from app.agent.memory.indexer import trigger_item_indexing
+    trigger_item_indexing(str(new_item.id))
+
     return ItemResponse.model_validate(new_item)
 
 
@@ -146,12 +148,18 @@ async def update_item(
     
     # Update fields
     update_data = item_data.model_dump(exclude_unset=True)
+    embedding_relevant_fields = {'title', 'description', 'acceptance_criteria', 'type'}
+    content_changed = bool(update_data.keys() & embedding_relevant_fields)
     for field, value in update_data.items():
         setattr(item, field, value)
-    
+
     await db.commit()
     await db.refresh(item)
-    
+
+    if content_changed:
+        from app.agent.memory.indexer import trigger_item_indexing
+        trigger_item_indexing(str(item.id))
+
     return ItemResponse.model_validate(item)
 
 

@@ -5,13 +5,10 @@ from sqlalchemy.orm import Session
 from app.models.note import Note
 from app.database import SessionLocal
 from app.services.knowledge_base import knowledge_base_service
+from app.services.embedding_service import embedding_service
 from app.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
-
-
-def _get_collection_name(user_id: str) -> str:
-    return f"notebook_{user_id.replace('-', '_')}"
 
 
 def _get_file_id(note_id: str) -> str:
@@ -29,7 +26,6 @@ def index_note_task(note_id: str):
             return
 
         user_id = str(note.user_id)
-        collection_name = _get_collection_name(user_id)
         file_id = _get_file_id(note_id)
 
         # Build text for embedding
@@ -38,8 +34,8 @@ def index_note_task(note_id: str):
         if tags_str:
             text += f"\n\nTags: {tags_str}"
 
-        # Get or create the user's notebook collection
-        collection = knowledge_base_service.get_or_create_collection(collection_name)
+        # Get or create the user's notebook collection (direct, no agent_ prefix)
+        collection = knowledge_base_service.get_or_create_notebook_collection(user_id)
 
         # Delete old chunks for this note
         try:
@@ -58,7 +54,7 @@ def index_note_task(note_id: str):
         chunks = knowledge_base_service.chunk_text(text)
         added_count = 0
         for i, chunk in enumerate(chunks):
-            embedding = knowledge_base_service.generate_embedding(chunk)
+            embedding = embedding_service.embed_text(chunk)
             if not embedding:
                 continue
             chunk_id = f"{file_id}_chunk_{i}"
@@ -79,7 +75,7 @@ def index_note_task(note_id: str):
         note.chroma_indexed = True
         db.commit()
 
-        logger.info(f"Indexed note {note_id} into {collection_name} ({added_count} chunks)")
+        logger.info(f"Indexed note {note_id} into notebook_{user_id.replace('-', '_')} ({added_count} chunks)")
 
     except Exception as e:
         logger.error(f"Error indexing note {note_id}: {e}")

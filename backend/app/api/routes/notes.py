@@ -35,6 +35,8 @@ async def create_note(
     db.add(note)
     await db.commit()
     await db.refresh(note)
+    from app.agent.memory.note_indexer import trigger_note_indexing
+    trigger_note_indexing(str(note.id))
     return NoteResponse.from_orm_model(note)
 
 
@@ -142,6 +144,11 @@ async def update_note(
 
     await db.commit()
     await db.refresh(note)
+
+    if content_changed:
+        from app.agent.memory.note_indexer import trigger_note_indexing
+        trigger_note_indexing(str(note.id))
+
     return NoteResponse.from_orm_model(note)
 
 
@@ -161,10 +168,8 @@ async def delete_note(
     # Delete from ChromaDB
     try:
         from app.services.knowledge_base import knowledge_base_service
-        user_id_clean = str(current_user.id).replace("-", "_")
         file_id = f"note_{note_id.replace('-', '_')}"
-        collection_name = f"notebook_{user_id_clean}"
-        knowledge_base_service.delete_file(collection_name, file_id)
+        knowledge_base_service.delete_notebook_file(str(current_user.id), file_id)
     except Exception:
         pass  # Don't fail if ChromaDB cleanup fails
 

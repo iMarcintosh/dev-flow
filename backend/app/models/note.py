@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, String, DateTime, ForeignKey, Text, event, Index
+from sqlalchemy import Boolean, Column, String, DateTime, ForeignKey, Text, Index
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -27,20 +27,3 @@ class Note(Base):
         Index('ix_notes_user_id_updated_at', 'user_id', 'updated_at'),
     )
 
-
-@event.listens_for(Note, 'after_insert')
-def trigger_note_indexing_on_insert(mapper, connection, target):
-    """Trigger ChromaDB indexing after note creation."""
-    from app.agent.memory.note_indexer import trigger_note_indexing
-    trigger_note_indexing(str(target.id))
-
-
-@event.listens_for(Note, 'after_update')
-def trigger_note_indexing_on_update(mapper, connection, target):
-    """Trigger ChromaDB re-indexing after note update if content changed."""
-    state = target._sa_instance_state
-    history = state.attrs
-    relevant_fields = ['title', 'content', 'tags']
-    if any(history[field].history.has_changes() for field in relevant_fields if field in history):
-        from app.agent.memory.note_indexer import trigger_note_indexing
-        trigger_note_indexing(str(target.id))

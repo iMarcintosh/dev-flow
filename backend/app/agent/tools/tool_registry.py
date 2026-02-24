@@ -49,10 +49,10 @@ AVAILABLE_TOOLS: Dict[str, dict] = {
         "functions": ["mcp_tools"],
     },
     "notebook": {
-        "name": "Notebook Search",
-        "description": "Search user's personal notes and code snippets in the Developer Notebook",
+        "name": "Notebook",
+        "description": "Search and create notes in the user's personal Developer Notebook",
         "category": "knowledge",
-        "functions": ["search_notebook"],
+        "functions": ["search_notebook", "create_note"],
     },
     "git": {
         "name": "Git Operations",
@@ -142,6 +142,8 @@ def create_board_tools(db, user_id: str, project_id: str) -> List[StructuredTool
             )
             db.add(item)
             await db.commit()
+            from app.agent.memory.indexer import trigger_item_indexing
+            trigger_item_indexing(str(item.id))
             return f"✅ Created {item.type} '{item.title}' (ID: {item.id})"
         except Exception as e:
             return f"❌ Error creating task: {str(e)}"
@@ -294,10 +296,11 @@ def get_tools_list(
 
         elif tool_name == "notebook":
             if user_id:
-                from app.agent.tools.notebook_tool import NotebookTool
-                notebook_tool = NotebookTool(user_id=str(user_id))
-                tools.append(notebook_tool)
-                logger.info(f"✅ Added notebook tool for user {user_id}")
+                from app.agent.tools.notebook_tool import NotebookTool, NotebookCreateTool
+                tools.append(NotebookTool(user_id=str(user_id)))
+                if db:
+                    tools.append(NotebookCreateTool(user_id=str(user_id), db=db))
+                logger.info(f"✅ Added notebook tools for user {user_id}")
             else:
                 logger.warning(f"⚠️ notebook tool requested but no user_id provided")
 
@@ -363,10 +366,11 @@ def bind_tools_to_llm(
 
         elif tool_name == "notebook":
             if user_id:
-                from app.agent.tools.notebook_tool import NotebookTool
-                notebook_tool = NotebookTool(user_id=str(user_id))
-                tools.append(notebook_tool)
-                logger.info(f"✅ Added notebook tool for user {user_id}")
+                from app.agent.tools.notebook_tool import NotebookTool, NotebookCreateTool
+                tools.append(NotebookTool(user_id=str(user_id)))
+                if db:
+                    tools.append(NotebookCreateTool(user_id=str(user_id), db=db))
+                logger.info(f"✅ Added notebook tools for user {user_id}")
             else:
                 logger.warning(f"⚠️ notebook tool requested but no user_id provided")
 

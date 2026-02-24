@@ -1,7 +1,6 @@
 """Auto-indexing for item embeddings."""
 
 import logging
-import asyncio
 from sqlalchemy.orm import Session
 
 from app.models.item import Item
@@ -34,8 +33,8 @@ def index_item_task(item_id: str):
             priority=item.priority.value
         )
         
-        # Generate embedding (use asyncio.run for async function)
-        embedding = asyncio.run(embedding_service.embed_text(text))
+        # Generate embedding
+        embedding = embedding_service.embed_text(text)
         
         # Update item
         item.embedding = embedding
@@ -76,8 +75,8 @@ def index_all_project_items_task(project_id: str):
             for item in items
         ]
         
-        # Generate embeddings (use asyncio.run for async function)
-        embeddings = asyncio.run(embedding_service.embed_batch(texts))
+        # Generate embeddings
+        embeddings = embedding_service.embed_batch(texts)
         
         # Update all items
         for item, embedding in zip(items, embeddings):

@@ -45,7 +45,7 @@ class VectorStore:
         )
         
         # Generate embedding
-        embedding = await embedding_service.embed_text(text)
+        embedding = embedding_service.embed_text(text)
         
         # Update item
         item.embedding = embedding
@@ -71,7 +71,7 @@ class VectorStore:
             List of most relevant items
         """
         # Generate query embedding
-        query_embedding = await embedding_service.embed_text(query)
+        query_embedding = embedding_service.embed_text(query)
         
         # pgvector cosine similarity search
         # <=> operator computes cosine distance (lower is better)
