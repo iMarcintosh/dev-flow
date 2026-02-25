@@ -79,6 +79,14 @@ def setup_agents(sender, **kwargs):
 
         asyncio.run(_recover())
 
+        # Re-index items without embeddings on worker startup
+        try:
+            from app.agent.memory.indexer import index_missing_embeddings_task
+            index_missing_embeddings_task.apply_async(countdown=5)  # 5s delay for DB readiness
+            print("✓ Triggered re-indexing of items without embeddings")
+        except Exception as e:
+            print(f"Warning: Could not trigger re-indexing: {e}")
+
     except Exception as e:
         print(f"Error importing agents: {e}")
         import traceback

@@ -70,6 +70,7 @@ app.include_router(notes.router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("DevFlow backend starting up...")
+    # Re-indexing is handled by Celery worker startup (celery_app.py setup_agents)
 
 
 @app.on_event("shutdown")

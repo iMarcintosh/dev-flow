@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send } from 'lucide-react'
-import { useChatHistory, useProjectItems } from '@/services/queries'
+import { MessageCircle, X, Send, Trash2 } from 'lucide-react'
+import { useChatHistory, useProjectItems, useClearChatHistory } from '@/services/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ChatMessage } from '@/types/chat'
 
@@ -15,11 +15,18 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
   const [message, setMessage] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
+  const [optimisticUserMessage, setOptimisticUserMessage] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
 
   const { data: history = [] } = useChatHistory(isOpen ? projectId : undefined)
   const { data: items = [] } = useProjectItems(isOpen ? projectId : undefined)
+  const clearMutation = useClearChatHistory(projectId)
+
+  const handleClearHistory = () => {
+    if (!confirm('Clear all chat history for this project?')) return
+    clearMutation.mutate()
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -36,6 +43,7 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
     setMessage('')
     setIsStreaming(true)
     setStreamingContent('')
+    setOptimisticUserMessage(text)
 
     try {
       const token = localStorage.getItem('access_token')
@@ -71,9 +79,13 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
             } else if (event.type === 'end') {
               setIsStreaming(false)
               setStreamingContent('')
+              setOptimisticUserMessage(null)
               queryClient.invalidateQueries({ queryKey: ['chat', projectId] })
             } else if (event.type === 'error') {
               setStreamingContent(event.content || 'An error occurred.')
+              setIsStreaming(false)
+              setOptimisticUserMessage(null)
+              queryClient.invalidateQueries({ queryKey: ['chat', projectId] })
             }
           } catch {
             // skip malformed SSE lines
@@ -85,6 +97,7 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
       setStreamingContent('Failed to connect. Please try again.')
     } finally {
       setIsStreaming(false)
+      setOptimisticUserMessage(null)
     }
   }
 
@@ -114,12 +127,22 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
           <MessageCircle className="w-5 h-5 text-indigo-500" />
           <h3 className="font-semibold text-white">DevFlow Assistant</h3>
         </div>
-        <button
-          onClick={() => setIsOpen(false)}
-          className="text-gray-400 hover:text-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleClearHistory}
+            disabled={isStreaming || clearMutation.isPending}
+            title="Clear chat history"
+            className="text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Context Indicator */}
@@ -144,6 +167,15 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
         {history.map((msg) => (
           <ChatBubble key={msg.id} message={msg} />
         ))}
+
+        {/* Optimistic user message */}
+        {optimisticUserMessage && (
+          <div className="flex justify-end">
+            <div className="max-w-[80%] rounded-lg px-4 py-2 bg-indigo-600 text-white">
+              <p className="text-sm whitespace-pre-wrap">{optimisticUserMessage}</p>
+            </div>
+          </div>
+        )}
 
         {/* Streaming bubble */}
         {isStreaming && !streamingContent && (

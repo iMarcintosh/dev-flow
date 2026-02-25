@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Pin, Tag, Eye, EyeOff, Trash2, Loader2, Check } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUpdateNote, useDeleteNote } from '@/services/noteQueries'
@@ -57,6 +61,14 @@ export function NoteEditor({ note, onDeleted }: NoteEditorProps) {
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTitle, debouncedContent, debouncedTags])
+
+  // Auto-resize textarea to content height
+  useEffect(() => {
+    if (textareaRef.current && !showPreview) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    }
+  }, [content, showPreview])
 
   // Mark as unsaved when user types
   const handleTitleChange = (value: string) => {
@@ -121,8 +133,77 @@ export function NoteEditor({ note, onDeleted }: NoteEditorProps) {
           return
         }
       }
+
+      // Bullet/numbered list continuation on Enter
+      if (e.key === 'Enter' && !showPalette) {
+        const textarea = e.currentTarget
+        const cursorPos = textarea.selectionStart
+        const textBeforeCursor = content.slice(0, cursorPos)
+        const lastNewline = textBeforeCursor.lastIndexOf('\n')
+        const currentLine = textBeforeCursor.slice(lastNewline + 1)
+
+        const bulletMatch = currentLine.match(/^(- )(.*)$/)
+        const numberedMatch = currentLine.match(/^(\d+)\. (.*)$/)
+
+        if (bulletMatch) {
+          e.preventDefault()
+          if (bulletMatch[2] === '') {
+            // Empty bullet — end the list
+            const newContent = content.slice(0, lastNewline + 1) + content.slice(cursorPos)
+            setContent(newContent)
+            setSaveState('unsaved')
+            requestAnimationFrame(() => {
+              if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(lastNewline + 1, lastNewline + 1)
+              }
+            })
+          } else {
+            // Continue bullet list
+            const insert = '\n- '
+            const newContent = content.slice(0, cursorPos) + insert + content.slice(cursorPos)
+            setContent(newContent)
+            setSaveState('unsaved')
+            const newCursor = cursorPos + insert.length
+            requestAnimationFrame(() => {
+              if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(newCursor, newCursor)
+              }
+            })
+          }
+          return
+        }
+
+        if (numberedMatch) {
+          e.preventDefault()
+          const num = parseInt(numberedMatch[1], 10)
+          if (numberedMatch[2] === '') {
+            // Empty numbered item — end the list
+            const newContent = content.slice(0, lastNewline + 1) + content.slice(cursorPos)
+            setContent(newContent)
+            setSaveState('unsaved')
+            requestAnimationFrame(() => {
+              if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(lastNewline + 1, lastNewline + 1)
+              }
+            })
+          } else {
+            // Continue numbered list
+            const insert = `\n${num + 1}. `
+            const newContent = content.slice(0, cursorPos) + insert + content.slice(cursorPos)
+            setContent(newContent)
+            setSaveState('unsaved')
+            const newCursor = cursorPos + insert.length
+            requestAnimationFrame(() => {
+              if (textareaRef.current) {
+                textareaRef.current.setSelectionRange(newCursor, newCursor)
+              }
+            })
+          }
+          return
+        }
+      }
     },
-    [showPalette, paletteQuery, paletteSelectedIndex]
+    [showPalette, paletteQuery, paletteSelectedIndex, content]
   )
 
   const handleTextareaChange = useCallback(
@@ -309,7 +390,7 @@ export function NoteEditor({ note, onDeleted }: NoteEditorProps) {
             onChange={handleTextareaChange}
             onKeyDown={handleTextareaKeyDown}
             placeholder="Start writing... Type / for commands"
-            className="w-full h-full min-h-[400px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none font-mono leading-relaxed"
+            className="w-full min-h-[200px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none font-mono leading-relaxed"
           />
         )}
       </div>
@@ -330,34 +411,39 @@ export function NoteEditor({ note, onDeleted }: NoteEditorProps) {
 }
 
 function MarkdownPreview({ content }: { content: string }) {
-  // Simple markdown rendering without external dep
-  // Use a pre-styled div with basic markdown parsing
   return (
-    <div
-      className="prose prose-invert prose-sm max-w-none text-foreground"
-      dangerouslySetInnerHTML={{ __html: simpleMarkdownToHtml(content) }}
-    />
+    <div className="prose prose-invert prose-sm max-w-none">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '')
+            const language = match ? match[1] : ''
+            const codeString = String(children).replace(/\n$/, '')
+            return !inline && language ? (
+              <div className="my-3 rounded-lg overflow-hidden border border-border">
+                <div className="flex items-center px-4 py-2 bg-muted border-b border-border">
+                  <span className="text-xs font-medium text-muted-foreground uppercase">{language}</span>
+                </div>
+                <SyntaxHighlighter
+                  language={language}
+                  style={vscDarkPlus}
+                  showLineNumbers
+                  customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem', padding: '1rem' }}
+                >
+                  {codeString}
+                </SyntaxHighlighter>
+              </div>
+            ) : (
+              <code className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono" {...props}>
+                {children}
+              </code>
+            )
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   )
-}
-
-function simpleMarkdownToHtml(markdown: string): string {
-  return markdown
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-4 mb-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-5 mb-2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-6 mb-3">$1</h1>')
-    .replace(/^---$/gm, '<hr class="border-border my-4" />')
-    .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-primary pl-3 text-muted-foreground my-2">$1</blockquote>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
-    .replace(/```[\s\S]*?```/g, (match) => {
-      const code = match.slice(3, -3).trim()
-      return `<pre class="bg-muted rounded-md p-3 text-xs font-mono overflow-x-auto my-3"><code>${code}</code></pre>`
-    })
-    .replace(/`([^`]+)`/g, '<code class="bg-muted px-1 rounded text-xs font-mono">$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br />')
 }

@@ -30,10 +30,10 @@ export function Sidebar() {
   const activeProject = projects.find(p => p.id === activeProjectId) ?? projects[0]
 
   const navigation = [
-    { name: 'Board', href: '/board', icon: LayoutDashboard },
-    { name: 'Agent Hub', href: '/agents', icon: Cpu },
-    { name: 'Teams', href: '/teams', icon: Users },
-    { name: 'Notebook', href: '/notebook', icon: BookOpen },
+    { name: 'Board', href: '/board', icon: LayoutDashboard, keepProject: true },
+    { name: 'Agent Hub', href: '/agents', icon: Cpu, keepProject: true },
+    { name: 'Teams', href: '/teams', icon: Users, keepProject: false },
+    { name: 'Notebook', href: '/notebook', icon: BookOpen, keepProject: true },
   ]
 
   // Close dropdowns when clicking outside
@@ -92,6 +92,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               to={item.href}
+              search={(prev) => ({ ...prev, project_id: item.keepProject ? activeProjectId : undefined })}
               className={`
                 group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
                 ${active
@@ -127,7 +128,8 @@ export function Sidebar() {
                 <button
                   key={project.id}
                   onClick={() => {
-                    navigate({ to: '/board', search: { project_id: project.id } })
+                    const currentPath = routerState.location.pathname
+                    navigate({ to: currentPath as any, search: { project_id: project.id } })
                     setIsProjectDropdownOpen(false)
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"

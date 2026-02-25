@@ -3,11 +3,12 @@
 import json
 import logging
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
+from uuid import UUID
 import uuid
 
 from app.database import get_db
@@ -139,25 +140,19 @@ async def send_chat_message_stream(
             db.add(user_msg)
             await db.commit()
 
-            # 2. Load conversation history (last 20 messages)
-            history = await agent._get_conversation_history(
-                db, request.project_id, limit=20
-            )
-
-            # 3. Get project context (stats + semantic search)
+            # 2. Get project context (stats + semantic search)
             from app.agent.memory.vector_store import vector_store
             stats = await vector_store.get_project_stats(db, request.project_id)
             relevant_items = await vector_store.similarity_search(
-                db, request.message, request.project_id, top_k=5
+                db, request.message, request.project_id, top_k=15
             )
-            context = agent._build_context(stats, relevant_items, history)
+            context = agent._build_context(stats, relevant_items)
 
-            # 4. Get LLM
+            # 3. Get LLM
             llm = await agent._get_llm(str(current_user.id))
             if not llm:
                 error_msg = "No LLM available. Please configure an API key in Settings."
                 yield f'data: {json.dumps({"type": "stream", "content": error_msg})}\n\n'
-                # Save error as assistant message
                 assistant_msg = ChatMessage(
                     user_id=str(current_user.id),
                     project_id=request.project_id,
@@ -169,8 +164,13 @@ async def send_chat_message_stream(
                 yield f'data: {json.dumps({"type": "end"})}\n\n'
                 return
 
-            # 5. Stream LLM response
-            from langchain_core.messages import SystemMessage, HumanMessage
+            # 4. Stream via LangGraph checkpointer for conversation memory
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+            from langgraph.prebuilt import create_react_agent
+            from langchain_core.messages import HumanMessage
+            from app.agent.custom_agent_runner import _get_postgres_conn_string
+
+            thread_id = f"board-{request.project_id}-{current_user.id}"
 
             system_prompt = f"""You are a helpful AI assistant for DevFlow, a project management tool.
 You have access to the user's project board with all their tasks, bugs, stories, and epics.
@@ -196,18 +196,30 @@ Guidelines:
 
 Remember: Accuracy is more important than being helpful. It's better to say "I don't have that information" than to make something up."""
 
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=request.message),
-            ]
-
             full_response = ""
-            async for chunk in llm.astream(messages):
-                if chunk.content:
-                    full_response += chunk.content
-                    yield f'data: {json.dumps({"type": "stream", "content": chunk.content})}\n\n'
+            async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+                await checkpointer.setup()
+                agent_executor = create_react_agent(
+                    llm,
+                    tools=[],
+                    prompt=system_prompt,
+                    checkpointer=checkpointer,
+                )
+                async for event in agent_executor.astream(
+                    {"messages": [HumanMessage(content=request.message)]},
+                    stream_mode=["messages", "values"],
+                    config={"configurable": {"thread_id": thread_id}},
+                ):
+                    mode, data = event
+                    if mode != "messages":
+                        continue
+                    msg, metadata = data
+                    from langchain_core.messages import AIMessageChunk
+                    if isinstance(msg, AIMessageChunk) and msg.content:
+                        full_response += msg.content
+                        yield f'data: {json.dumps({"type": "stream", "content": msg.content})}\n\n'
 
-            # 6. Save assistant message
+            # 5. Save assistant message for frontend display
             assistant_msg = ChatMessage(
                 user_id=str(current_user.id),
                 project_id=request.project_id,
@@ -222,6 +234,7 @@ Remember: Accuracy is more important than being helpful. It's better to say "I d
         except Exception as e:
             logger.exception("Error in chat stream")
             yield f'data: {json.dumps({"type": "error", "content": str(e)})}\n\n'
+            yield f'data: {json.dumps({"type": "end"})}\n\n'
 
     return StreamingResponse(
         generate(),
@@ -262,3 +275,35 @@ async def get_chat_history(
         )
         for msg in messages
     ]
+
+
+@router.delete("/history")
+async def clear_chat_history(
+    project_id: UUID = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear chat history for a project (DB messages + LangGraph checkpoint thread)."""
+    await verify_project_access(project_id, current_user, db)
+
+    from sqlalchemy import delete as sql_delete
+    from app.agent.custom_agent_runner import _get_postgres_conn_string
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    # Delete DB messages for this user+project
+    await db.execute(
+        sql_delete(ChatMessage).where(
+            and_(
+                ChatMessage.project_id == str(project_id),
+                ChatMessage.user_id == str(current_user.id),
+            )
+        )
+    )
+    await db.commit()
+
+    # Delete LangGraph checkpoint thread
+    thread_id = f"board-{project_id}-{current_user.id}"
+    async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+        await checkpointer.adelete_thread(thread_id)
+
+    return {"success": True, "message": "Chat history cleared"}

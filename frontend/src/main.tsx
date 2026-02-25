@@ -50,6 +50,9 @@ const agentsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/agents',
   component: AgentHubPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    project_id: search.project_id as string | undefined,
+  }),
 })
 
 const chatRoute = createRoute({
