@@ -16,4 +16,5 @@ env/
 celerybeat-schedule
 
 # ChromaDB — local vector store, rebuilt at runtime
+backend/chromadb/
 backend/data/chromadb/
