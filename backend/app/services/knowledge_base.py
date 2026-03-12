@@ -51,7 +51,7 @@ class KnowledgeBaseService:
             metadata={"user_id": user_id, "hnsw:space": "cosine"}
         )
 
-    def search_notebook(self, user_id: str, query: str, n_results: int = 5) -> List[Dict[str, any]]:
+    def search_notebook(self, user_id: str, query: str, n_results: int = 5, api_key: Optional[str] = None) -> List[Dict[str, any]]:
         """Search a user's notebook collection"""
         try:
             collection = self.get_or_create_notebook_collection(user_id)
@@ -59,7 +59,7 @@ class KnowledgeBaseService:
             if collection.count() == 0:
                 return []
 
-            query_embedding = self.generate_embedding(query)
+            query_embedding = self.generate_embedding(query, api_key=api_key)
             if not query_embedding:
                 return []
 
@@ -166,10 +166,10 @@ class KnowledgeBaseService:
         
         return [c for c in chunks if c]  # Filter empty chunks
     
-    def generate_embedding(self, text: str) -> Optional[List[float]]:
+    def generate_embedding(self, text: str, api_key: Optional[str] = None) -> Optional[List[float]]:
         """Generate embedding using the shared EmbeddingService."""
         try:
-            return _embedding_service.embed_text(text)
+            return _embedding_service.embed_text(text, api_key=api_key)
         except Exception as e:
             logger.error(f"Error generating embedding: {e}")
             return None
@@ -179,7 +179,8 @@ class KnowledgeBaseService:
         agent_id: str,
         file_path: str,
         filename: str,
-        file_type: str
+        file_type: str,
+        api_key: Optional[str] = None
     ) -> Dict[str, any]:
         """
         Add uploaded file to agent's knowledge base
@@ -216,7 +217,7 @@ class KnowledgeBaseService:
             added_count = 0
             for i, chunk in enumerate(chunks):
                 # Generate embedding
-                embedding = self.generate_embedding(chunk)
+                embedding = self.generate_embedding(chunk, api_key=api_key)
                 if not embedding:
                     continue
                 
@@ -253,7 +254,8 @@ class KnowledgeBaseService:
         self,
         agent_id: str,
         query: str,
-        n_results: int = 5
+        n_results: int = 5,
+        api_key: Optional[str] = None
     ) -> List[Dict[str, any]]:
         """
         Search agent's knowledge base
@@ -274,10 +276,10 @@ class KnowledgeBaseService:
                 return []
             
             # Generate query embedding
-            query_embedding = self.generate_embedding(query)
+            query_embedding = self.generate_embedding(query, api_key=api_key)
             if not query_embedding:
                 return []
-            
+
             # Search
             results = collection.query(
                 query_embeddings=[query_embedding],

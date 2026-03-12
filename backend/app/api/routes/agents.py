@@ -192,7 +192,12 @@ async def apply_agent_results(
         created_items.append(new_item)
     
     await db.commit()
-    
+
+    # Trigger embedding indexing for each new item
+    from app.agent.memory.indexer import trigger_item_indexing
+    for item in created_items:
+        trigger_item_indexing(str(item.id))
+
     return {
         "success": True,
         "items_created": len(created_items),

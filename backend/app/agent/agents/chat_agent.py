@@ -3,7 +3,7 @@
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from app.agent.base_agent import (
     BaseDevFlowAgent,
@@ -14,7 +14,6 @@ from app.agent.base_agent import (
 from app.agent.memory.vector_store import vector_store
 from app.database import async_session_maker
 from app.models.chat import ChatMessage
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +45,17 @@ class ChatAgent(BaseDevFlowAgent):
             return llm
         except Exception as e:
             logger.warning(f"Failed to get user LLM: {e}, using fallback")
-            # Fallback to default
-            if settings.anthropic_api_key:
+            from app.services import api_key_service
+            async with async_session_maker() as db:
+                anthropic_key = await api_key_service.get_api_key(db, user_id, "anthropic")
+            if anthropic_key:
                 from langchain_anthropic import ChatAnthropic
                 return ChatAnthropic(
                     model="claude-3-haiku-20240307",
-                    anthropic_api_key=settings.anthropic_api_key,
+                    anthropic_api_key=anthropic_key,
                     temperature=0.7,
-                    max_tokens=2048
+                    max_tokens=2048,
+                    timeout=30
                 )
             return None
 
@@ -72,8 +74,10 @@ class ChatAgent(BaseDevFlowAgent):
 
                 # 2. Semantic search for relevant items
                 await self.log(run_id, "Searching for relevant items...")
+                from app.services import api_key_service
+                openai_key = await api_key_service.get_api_key(db, input.user_id, "openai")
                 relevant_items = await vector_store.similarity_search(
-                    db, user_message, project_id, top_k=15
+                    db, user_message, project_id, top_k=15, api_key=openai_key
                 )
 
                 # 3. Build context (stats + relevant items, no history — checkpointer handles it)
@@ -122,15 +126,13 @@ class ChatAgent(BaseDevFlowAgent):
         """Build contextual information for the agent."""
         parts = ["# Project Context\n"]
 
-        # Statistics
-        parts.append(f"Total Items: {stats['total_items']}")
-        parts.append(f"By Status: {json.dumps(stats['by_status'])}")
-        parts.append(f"By Type: {json.dumps(stats['by_type'])}")
-        parts.append(f"By Priority: {json.dumps(stats['by_priority'])}")
-        parts.append("")
-
-        # Relevant items
         if items:
+            # Stats only make sense when items are searchable
+            parts.append(f"Total Items: {stats['total_items']}")
+            parts.append(f"By Status: {json.dumps(stats['by_status'])}")
+            parts.append(f"By Type: {json.dumps(stats['by_type'])}")
+            parts.append(f"By Priority: {json.dumps(stats['by_priority'])}")
+            parts.append("")
             parts.append("# Relevant Items:\n")
             for idx, item in enumerate(items[:15], 1):
                 parts.append(f"{idx}. [{item.type.value.upper()}] {item.title} (ID: {item.id})")
@@ -142,6 +144,9 @@ class ChatAgent(BaseDevFlowAgent):
                 if item.acceptance_criteria:
                     parts.append(f"   Acceptance Criteria: {item.acceptance_criteria[:500]}")
                 parts.append("")
+        else:
+            parts.append("# Relevant Items: NONE")
+            parts.append("No items have been indexed yet. Item details are not available.")
 
         return "\n".join(parts)
 
@@ -161,16 +166,23 @@ class ChatAgent(BaseDevFlowAgent):
                 from langchain_core.messages import HumanMessage
                 from app.agent.custom_agent_runner import _get_postgres_conn_string
 
-                thread_id = f"board-{project_id}-{user_id}"
+                today = date.today().isoformat()
+                thread_id = f"board-{project_id}-{user_id}-{today}"
+
+                no_items_notice = ""
+                if not items:
+                    no_items_notice = "\n⚠️ NOTE: No items have been found via semantic search. This likely means items are not yet indexed. Tell the user that their items are not searchable yet and suggest waiting a moment before asking again.\n"
 
                 system_prompt = f"""You are a helpful AI assistant for DevFlow, a project management tool.
-You have access to the user's project board with all their tasks, bugs, stories, and epics.
 
+IMPORTANT: The board state below is AUTHORITATIVE. Ignore any items mentioned in previous messages in this conversation that do not appear in the "Relevant Items" section — the board may have changed since those messages.
+
+{no_items_notice}
 {context}
 
 CRITICAL RULES - NEVER VIOLATE THESE:
 1. ONLY reference items that are EXPLICITLY listed in the "Relevant Items" section above
-2. If no relevant items are found, say "I don't see any items matching that" - DO NOT make up items
+2. If the "Relevant Items" section is EMPTY or missing, you MUST say you cannot find any matching items (they may not be indexed yet). NEVER describe, list, or reference any items not in that section.
 3. NEVER invent item titles, descriptions, or details that aren't in the context
 4. Use exact item titles from the context - do not paraphrase or change them
 5. If you're unsure, say "I'm not certain" instead of guessing

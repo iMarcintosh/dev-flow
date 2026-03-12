@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { RefreshCw, AlertCircle, CheckCircle, Info, X } from 'lucide-react'
 import { api } from '@/services/api'
@@ -29,7 +30,7 @@ export function EmbeddingRepairDialog() {
   const { data: health, isLoading: healthLoading, refetch } = useQuery<EmbeddingHealth>({
     queryKey: ['embedding-health'],
     queryFn: async () => {
-      const response = await api.get('/admin/embedding-health')
+      const response = await api.get('/api/admin/embedding-health')
       return response.data
     },
     enabled: isOpen,
@@ -37,7 +38,7 @@ export function EmbeddingRepairDialog() {
 
   const repairMutation = useMutation<RepairResult, Error>({
     mutationFn: async () => {
-      const response = await api.post('/admin/repair-embeddings')
+      const response = await api.post('/api/admin/repair-embeddings')
       return response.data
     },
     onSuccess: () => {
@@ -61,7 +62,7 @@ export function EmbeddingRepairDialog() {
     )
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-card border border-border rounded-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -234,7 +235,8 @@ export function EmbeddingRepairDialog() {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

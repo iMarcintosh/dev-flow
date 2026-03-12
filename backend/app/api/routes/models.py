@@ -5,6 +5,8 @@ from typing import Dict, List, Any
 from app.services.model_discovery import model_discovery_service
 from app.models.user import User
 from app.auth import get_current_user
+from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 from app.config import settings
 import json
@@ -116,40 +118,29 @@ async def refresh_model_cache(current_user: User = Depends(get_current_user)):
 async def test_model_access(
     provider: str,
     model_name: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Test if a specific model is accessible with current API keys.
-    
+
     Args:
         provider: Provider name (anthropic, openai, openrouter)
         model_name: Model identifier
-        
+
     Returns:
         {
             "accessible": true/false,
             "message": "Details"
         }
     """
-    # Check if API key is configured
-    if provider == "anthropic" and not settings.anthropic_api_key:
+    from app.services import api_key_service
+    status = await api_key_service.get_api_key_status(db, str(current_user.id))
+    if status.get(provider, "none") == "none":
         return {
             "accessible": False,
-            "message": "Anthropic API key not configured"
+            "message": f"{provider} API key not configured"
         }
-    elif provider == "openai" and not settings.openai_api_key:
-        return {
-            "accessible": False,
-            "message": "OpenAI API key not configured"
-        }
-    elif provider == "openrouter" and not settings.openrouter_api_key:
-        return {
-            "accessible": False,
-            "message": "OpenRouter API key not configured"
-        }
-    
-    # TODO: Actually test the model by making a minimal API call
-    # For now, just check if key exists
     return {
         "accessible": True,
         "message": f"API key configured for {provider}"
