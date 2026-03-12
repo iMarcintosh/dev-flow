@@ -1,6 +1,6 @@
 # 🤖 LLM Integration Status
 
-**Stand: 2026-02-23**
+**Stand: 2026-03-12**
 
 ## ✅ Vollständig implementiert
 
@@ -9,17 +9,41 @@
 - Keys werden verschlüsselt gespeichert (Fernet/AES-128)
 - Fallback-Hierarchie: User Key → `.env` Global Key → Error
 - `model_resolver.py` resolved den richtigen Key automatisch pro User
+- **Model-Discovery-Cache ist per-User** (`available_models:{user_id}`) — jeder Nutzer sieht nur Modelle, auf die er Zugriff hat
+- **Embedding-Key für Knowledge-Base-Suche** wird ebenfalls per-User aufgelöst und an `KnowledgeBaseTool` weitergereicht
 
 ### Unterstützte Modelle
-- **Anthropic:** `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5-20251001`
-- **OpenAI:** GPT-4o, GPT-4o-mini
-- **OpenRouter:** Alle OpenRouter-kompatiblen Modelle
+
+#### Anthropic (hardcoded, kein API-Endpoint verfügbar)
+| Modell | Tier |
+|--------|------|
+| `claude-opus-4-6` | highest |
+| `claude-sonnet-4-6` | high |
+| `claude-haiku-4-5` | low |
+| `claude-sonnet-4-5`, `claude-opus-4-5` | legacy |
+| `claude-3-7-sonnet-latest` | high |
+| `claude-3-haiku-20240307` | low |
+
+#### OpenAI (live via `/v1/models` oder Fallback-Liste)
+| Familie | Modelle | Kontext |
+|---------|---------|---------|
+| GPT-5 (2026) | `gpt-5`, `gpt-5-mini` | 1M |
+| GPT-4.1 (2025) | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` | 1M |
+| GPT-4o | `gpt-4o`, `gpt-4o-mini` | 128k |
+| Reasoning | `o3`, `o3-mini`, `o1`, `o1-mini` | 200k/128k |
+
+Live-Fetch filtert auf Präfixe `gpt-5`, `gpt-4.1`, `gpt-4o`, `o1`, `o3`, `o4` und schließt Preview/veraltete Suffix-Varianten aus.
+
+#### OpenRouter
+- Alle OpenRouter-kompatiblen Modelle (live via `/api/v1/models`)
+- Kostenklasse wird aus `pricing.prompt` berechnet
 
 ### Agent Chat (SSE Streaming)
 - Agent Chat nutzt SSE statt WebSocket
 - Streaming per `POST /api/agent-chat/conversations/{id}/messages/stream`
 - LangGraph ReAct Agent für Tool-Calling
-- Optimistic Updates im Frontend seit 2026-02-23
+- **No-Flicker:** User- und Assistenten-Nachricht werden optimistisch in den TanStack Query Cache geschrieben; `invalidateQueries` mit `refetchType: 'none'` verhindert sofortigen Re-Fetch
+- **Streaming-Indikator:** Rotierender Conic-Gradient-Border (`animate-streaming-border`) statt Cursor-Span
 
 ## ⚙️ Konfiguration
 

@@ -253,50 +253,51 @@ function StreamingMessageBubble({ content, activeTools }: StreamingMessageBubble
       </div>
 
       <div className="flex-1 max-w-[70%] flex flex-col">
-        <div className="rounded-lg px-4 py-3 bg-card border border-border text-foreground">
-          {/* Tool badges */}
-          {activeTools.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {activeTools.map((tool, i) =>
-                tool.done ? (
-                  <div
-                    key={i}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-green-500/10 border border-green-500/30 text-green-400 transition-all"
-                  >
-                    <Check className="w-3 h-3" />
-                    <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
-                    <span>{tool.name}</span>
-                    {tool.duration_ms !== undefined && (
-                      <span className="opacity-60">{(tool.duration_ms / 1000).toFixed(1)}s</span>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    key={i}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-primary/10 border border-primary/30 text-primary animate-pulse-border"
-                  >
-                    <Loader className="w-3 h-3 animate-spin" />
-                    <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
-                    <span>{tool.name}</span>
-                  </div>
-                )
-              )}
-            </div>
-          )}
+        <div className="animate-streaming-border p-[1px] rounded-lg">
+          <div className="rounded-lg px-4 py-3 bg-card text-foreground">
+            {/* Tool badges */}
+            {activeTools.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {activeTools.map((tool, i) =>
+                  tool.done ? (
+                    <div
+                      key={i}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-green-500/10 border border-green-500/30 text-green-400 transition-all"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
+                      <span>{tool.name}</span>
+                      {tool.duration_ms !== undefined && (
+                        <span className="opacity-60">{(tool.duration_ms / 1000).toFixed(1)}s</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      key={i}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-primary/10 border border-primary/30 text-primary animate-pulse-border"
+                    >
+                      <Loader className="w-3 h-3 animate-spin" />
+                      <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
+                      <span>{tool.name}</span>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
 
-          {/* Streaming text or thinking indicator */}
-          {content ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-              <span className="inline-block w-0.5 h-[1em] bg-primary animate-cursor ml-0.5 align-text-bottom" />
-            </div>
-          ) : showThinking ? (
-            <div className="flex items-center gap-2 py-2">
-              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-1 inline-block" />
-              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-2 inline-block" />
-              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-3 inline-block" />
-            </div>
-          ) : null}
+            {/* Streaming text or thinking indicator */}
+            {content ? (
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              </div>
+            ) : showThinking ? (
+              <div className="flex items-center gap-2 py-2">
+                <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-1 inline-block" />
+                <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-2 inline-block" />
+                <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-3 inline-block" />
+              </div>
+            ) : null}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground mt-1">Thinking...</p>
       </div>

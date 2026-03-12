@@ -27,14 +27,16 @@ class KnowledgeBaseTool(BaseTool):
     )
     args_schema: Type[BaseModel] = KnowledgeBaseInput
     agent_id: str = ""  # Will be set when tool is created
-    
+    api_key: str = ""   # OpenAI API key for embeddings (per-user)
+
     def _run(self, query: str) -> str:
         """Search knowledge base synchronously"""
         try:
             results = knowledge_base_service.search_knowledge_base(
                 agent_id=self.agent_id,
                 query=query,
-                n_results=3
+                n_results=3,
+                api_key=self.api_key or None,
             )
             
             if not results:

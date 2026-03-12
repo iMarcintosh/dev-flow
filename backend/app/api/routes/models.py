@@ -32,12 +32,15 @@ async def get_redis():
 
 
 @router.get("")
-async def get_available_models() -> Dict[str, List[Dict[str, Any]]]:
+async def get_available_models(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, List[Dict[str, Any]]]:
     """
     Get all available models from all providers.
-    
-    Response is cached in Redis for 1 hour.
-    
+
+    Requires authentication. Response is cached per user in Redis for 1 hour.
+
     Returns:
         {
             "anthropic": [...],
@@ -45,31 +48,32 @@ async def get_available_models() -> Dict[str, List[Dict[str, Any]]]:
             "openrouter": [...]
         }
     """
+    from app.services import api_key_service
+    cache_key = f"available_models:{current_user.id}"
+
     try:
-        # Try to get from cache
         redis_client = await get_redis()
-        cached = await redis_client.get("available_models")
-        
+        cached = await redis_client.get(cache_key)
+
         if cached:
-            logger.info("Returning cached model list")
+            logger.info(f"Returning cached model list for user {current_user.id}")
             return json.loads(cached)
-        
-        # Fetch fresh data
-        logger.info("Fetching fresh model list from providers")
-        models = await model_discovery_service.get_all_models()
-        
-        # Cache for 1 hour
-        await redis_client.set(
-            "available_models",
-            json.dumps(models),
-            ex=3600
+
+        # Resolve per-user API keys
+        openai_key = await api_key_service.get_api_key(db, str(current_user.id), "openai") or ""
+        openrouter_key = await api_key_service.get_api_key(db, str(current_user.id), "openrouter") or ""
+
+        logger.info(f"Fetching fresh model list for user {current_user.id}")
+        models = await model_discovery_service.get_all_models(
+            openai_key=openai_key,
+            openrouter_key=openrouter_key
         )
-        
+
+        await redis_client.set(cache_key, json.dumps(models), ex=3600)
         return models
-        
+
     except Exception as e:
         logger.error(f"Error fetching models: {e}")
-        # Return fallback on error
         return {
             "anthropic": [m.to_dict() for m in model_discovery_service.ANTHROPIC_MODELS],
             "openai": [m.to_dict() for m in model_discovery_service.OPENAI_MODELS_FALLBACK],
@@ -78,28 +82,28 @@ async def get_available_models() -> Dict[str, List[Dict[str, Any]]]:
 
 
 @router.post("/refresh")
-async def refresh_model_cache(current_user: User = Depends(get_current_user)):
-    """
-    Manually refresh the model cache.
-    
-    Requires authentication.
-    """
+async def refresh_model_cache(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Manually refresh the model cache for the current user."""
+    from app.services import api_key_service
+    cache_key = f"available_models:{current_user.id}"
+
     try:
         redis_client = await get_redis()
-        
-        # Delete cache
-        await redis_client.delete("available_models")
-        
-        # Fetch fresh data
-        models = await model_discovery_service.get_all_models()
-        
-        # Cache for 1 hour
-        await redis_client.set(
-            "available_models",
-            json.dumps(models),
-            ex=3600
+        await redis_client.delete(cache_key)
+
+        openai_key = await api_key_service.get_api_key(db, str(current_user.id), "openai") or ""
+        openrouter_key = await api_key_service.get_api_key(db, str(current_user.id), "openrouter") or ""
+
+        models = await model_discovery_service.get_all_models(
+            openai_key=openai_key,
+            openrouter_key=openrouter_key
         )
-        
+
+        await redis_client.set(cache_key, json.dumps(models), ex=3600)
+
         return {
             "success": True,
             "message": "Model cache refreshed",
@@ -108,7 +112,7 @@ async def refresh_model_cache(current_user: User = Depends(get_current_user)):
                 for provider, models_list in models.items()
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Error refreshing cache: {e}")
         raise HTTPException(status_code=500, detail=str(e))

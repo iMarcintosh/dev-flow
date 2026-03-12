@@ -252,6 +252,7 @@ def get_tools_list(
     user_id: str = None,
     project_id: str = None,
     agent_id: str = None,
+    embedding_api_key: str = "",
 ) -> List[BaseTool]:
     """
     Get list of tools based on tool names.
@@ -288,7 +289,7 @@ def get_tools_list(
         
         elif tool_name == "knowledge_base":
             if agent_id:
-                kb_tool = KnowledgeBaseTool(agent_id=agent_id)
+                kb_tool = KnowledgeBaseTool(agent_id=agent_id, api_key=embedding_api_key)
                 tools.append(kb_tool)
                 logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
             else:
