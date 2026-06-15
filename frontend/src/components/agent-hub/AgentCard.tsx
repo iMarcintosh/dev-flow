@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { 
+import { useNavigate } from '@tanstack/react-router'
+import {
   Edit2, Trash2, MessageSquare, Star, Download, Lock, Users, Globe, Clock,
-  Activity, Cpu, Search, Code, FileText, Trello 
+  Activity, Cpu, Search, Code, FileText, Trello, AlertTriangle
 } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
+import { useProjects } from '@/services/queries'
 import type { CustomAgent } from '@/types/custom-agent'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { formatTime } from '@/utils/dateFormat'
@@ -28,6 +30,9 @@ export function AgentCard({
 }: AgentCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const navigate = useNavigate()
+  const { data: projects } = useProjects()
+  const defaultProjectId = projects?.[0]?.id
 
   const deleteMutation = useMutation({
     mutationFn: () => customAgentService.deleteAgent(agent.id),
@@ -56,7 +61,7 @@ export function AgentCard({
 
   const handleChat = (e: React.MouseEvent) => {
     e.stopPropagation()
-    window.location.href = `/chat?agent_id=${agent.id}`
+    navigate({ to: '/chat', search: { agent_id: agent.id, conversation_id: undefined, project_id: defaultProjectId } })
   }
 
   const handleInstall = (e: React.MouseEvent) => {
@@ -156,15 +161,22 @@ export function AgentCard({
 
           {/* Schedule Badge (if applicable) */}
           {agent.trigger === 'scheduled' && agent.schedule && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg">
-              <Clock className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">Scheduled</span>
-              {agent.next_scheduled_run && (
-                <span className="text-xs text-muted-foreground ml-auto">
-                  Next: {formatTime(agent.next_scheduled_run)}
-                </span>
-              )}
-            </div>
+            agent.beat_registered === false ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm font-medium text-yellow-500">Not registered in scheduler</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-lg">
+                <Clock className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-primary">Scheduled</span>
+                {agent.next_scheduled_run && (
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    Next: {formatTime(agent.next_scheduled_run)}
+                  </span>
+                )}
+              </div>
+            )
           )}
 
           {/* Divider */}

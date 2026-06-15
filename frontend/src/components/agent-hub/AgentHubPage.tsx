@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Plus, Loader2, Search } from 'lucide-react'
 import { AppLayout } from '@/components/layout/AppLayout'
+import { PageHeader } from '@/components/layout/PageHeader'
 import { customAgentService } from '@/services/custom-agents'
 import type { CustomAgent } from '@/types/custom-agent'
 import { AgentCard } from './AgentCard'
@@ -69,8 +70,8 @@ export default function AgentHubPage() {
     <AppLayout>
       <div className="min-h-screen bg-background">
         {/* Header */}
-        <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-8 py-6">
+        <PageHeader>
+          <div className="max-w-7xl mx-auto px-8 pt-6 pb-0">
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-foreground">Agent Hub</h1>
@@ -123,24 +124,24 @@ export default function AgentHubPage() {
                 Marketplace
               </button>
             </div>
-          </div>
-        </div>
 
-        {/* Search Bar */}
-        {activeTab !== 'templates' && (
-          <div className="max-w-7xl mx-auto px-8 py-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search agents..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-            </div>
+            {/* Search Bar — sticky inside header */}
+            {activeTab !== 'templates' && (
+              <div className="py-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search agents..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </PageHeader>
 
         {/* Content */}
         <div className="max-w-7xl mx-auto px-8 py-6">

@@ -4,8 +4,9 @@ Tool Registry for Custom Agents.
 Manages available tools that custom agents can use.
 """
 
-from typing import Dict, List, Optional, Any, Callable
-from langchain_core.tools import Tool, BaseTool
+from typing import Dict, List, Optional, Any, Callable, Type
+from pydantic import BaseModel, Field
+from langchain_core.tools import Tool, BaseTool, StructuredTool
 from langchain_core.language_models import BaseChatModel
 
 
@@ -15,7 +16,7 @@ AVAILABLE_TOOLS: Dict[str, dict] = {
         "name": "Board Management",
         "description": "Create, update, and manage board items (tasks, bugs, stories)",
         "category": "productivity",
-        "functions": ["create_task", "update_status", "add_comment", "assign_item"],
+        "functions": ["create_task", "list_items", "update_status", "add_comment"],
     },
     "web_search": {
         "name": "Web Search & URL Reading",
@@ -46,6 +47,12 @@ AVAILABLE_TOOLS: Dict[str, dict] = {
         "description": "Access tools from Model Context Protocol servers (filesystem, GitHub, etc.)",
         "category": "integration",
         "functions": ["mcp_tools"],
+    },
+    "notebook": {
+        "name": "Notebook",
+        "description": "Search and create notes in the user's personal Developer Notebook",
+        "category": "knowledge",
+        "functions": ["search_notebook", "create_note"],
     },
     "git": {
         "name": "Git Operations",
@@ -85,106 +92,138 @@ def list_available_tools() -> List[dict]:
     ]
 
 
-def create_board_tools(db, user_id: str, project_id: str) -> List[Tool]:
+class CreateTaskInput(BaseModel):
+    title: str = Field(description="Task title")
+    description: str = Field(default="", description="Task description")
+    type: str = Field(default="task", description="Item type: epic, story, bug, task, spike")
+    priority: str = Field(default="medium", description="Priority: low, medium, high, urgent")
+
+
+class ListItemsInput(BaseModel):
+    status: str = Field(default="", description="Optional status filter: backlog, in_progress, review, done. Leave empty for all items.")
+
+
+class UpdateStatusInput(BaseModel):
+    item_id: str = Field(description="UUID of the item to update")
+    new_status: str = Field(description="New status: backlog, in_progress, review, done")
+
+
+class AddCommentInput(BaseModel):
+    item_id: str = Field(description="UUID of the item to comment on")
+    comment: str = Field(description="Comment text to add")
+
+
+def create_board_tools(db, user_id: str, project_id: str) -> List[StructuredTool]:
     """
     Create LangChain tools for board operations.
-    
+
     Args:
         db: Database session
         user_id: User ID for permissions
         project_id: Project ID for board items
-    
+
     Returns:
-        List of LangChain Tool objects
+        List of LangChain StructuredTool objects
     """
     from app.models.item import Item
     from sqlalchemy import select
     import uuid
-    from datetime import datetime
-    
-    async def create_task(task_data: str) -> str:
-        """Create a new task on the board. Input should be JSON with title, description, type."""
-        import json
+
+    async def create_task(title: str, description: str = "", type: str = "task", priority: str = "medium") -> str:
         try:
-            data = json.loads(task_data)
             item = Item(
-                id=uuid.uuid4(),
                 project_id=uuid.UUID(project_id),
-                title=data.get("title", "New Task"),
-                description=data.get("description", ""),
-                item_type=data.get("type", "task"),
-                status="todo",
-                priority=data.get("priority", "medium"),
-                created_at=datetime.utcnow(),
+                title=title,
+                description=description,
+                type=type,
+                status="backlog",
+                priority=priority,
+                created_by=uuid.UUID(user_id),
             )
             db.add(item)
             await db.commit()
-            return f"✅ Created {item.item_type} '{item.title}' (ID: {item.id})"
+            from app.agent.memory.indexer import trigger_item_indexing
+            trigger_item_indexing(str(item.id))
+            return f"✅ Created {item.type} '{item.title}' (ID: {item.id})"
         except Exception as e:
             return f"❌ Error creating task: {str(e)}"
-    
-    async def update_status(update_data: str) -> str:
-        """Update item status. Input should be JSON with item_id and new_status."""
-        import json
+
+    async def list_items(status: str = "") -> str:
         try:
-            data = json.loads(update_data)
-            item_id = uuid.UUID(data["item_id"])
-            new_status = data["new_status"]
-            
-            result = await db.execute(select(Item).where(Item.id == item_id))
+            query = select(Item).where(Item.project_id == uuid.UUID(project_id))
+            if status:
+                query = query.where(Item.status == status)
+            query = query.order_by(Item.created_at.desc()).limit(50)
+            result = await db.execute(query)
+            items = result.scalars().all()
+            if not items:
+                return "📋 No items found."
+            lines = [f"📋 Found {len(items)} items:"]
+            for it in items:
+                lines.append(f"- [{it.status}] {it.type}: {it.title} (ID: {it.id})")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"❌ Error listing items: {str(e)}"
+
+    async def update_status(item_id: str, new_status: str) -> str:
+        try:
+            result = await db.execute(select(Item).where(Item.id == uuid.UUID(item_id)))
             item = result.scalar_one_or_none()
-            
             if not item:
                 return f"❌ Item {item_id} not found"
-            
             old_status = item.status
             item.status = new_status
             await db.commit()
-            
             return f"✅ Updated '{item.title}' status: {old_status} → {new_status}"
         except Exception as e:
             return f"❌ Error updating status: {str(e)}"
-    
-    async def add_comment(comment_data: str) -> str:
-        """Add a comment to an item. Input should be JSON with item_id and comment."""
-        import json
+
+    async def add_comment(item_id: str, comment: str) -> str:
         try:
-            data = json.loads(comment_data)
-            item_id = uuid.UUID(data["item_id"])
-            comment = data["comment"]
-            
-            result = await db.execute(select(Item).where(Item.id == item_id))
+            result = await db.execute(select(Item).where(Item.id == uuid.UUID(item_id)))
             item = result.scalar_one_or_none()
-            
             if not item:
                 return f"❌ Item {item_id} not found"
-            
             # TODO: Add to comments table when implemented
             return f"✅ Added comment to '{item.title}'"
         except Exception as e:
             return f"❌ Error adding comment: {str(e)}"
-    
+
     tools = [
-        Tool(
-            name="create_task",
-            description="Create a new task/bug/story on the board. Input: JSON with title, description, type, priority",
-            func=create_task,
+        StructuredTool.from_function(
             coroutine=create_task,
+            name="create_task",
+            description=(
+                "ALWAYS use this tool when the user asks to create, add, or write a new item on the board. "
+                "Call this when the user says 'erstelle', 'create', 'add', 'anlegen', 'new task', 'new epic', etc. "
+                "Use type='epic' for epics, 'story' for user stories, 'bug' for bugs, 'task' for tasks, 'spike' for spikes."
+            ),
+            args_schema=CreateTaskInput,
         ),
-        Tool(
-            name="update_status",
-            description="Update an item's status. Input: JSON with item_id and new_status (todo/in_progress/done)",
-            func=update_status,
+        StructuredTool.from_function(
+            coroutine=list_items,
+            name="list_items",
+            description=(
+                "List board items. Use this to answer questions about tasks, bugs, stories, or the backlog. "
+                "Call this when asked 'what is in the backlog', 'show me all tasks', 'what is in progress', etc. "
+                "Pass status to filter (backlog, in_progress, review, done), or leave empty for all items."
+            ),
+            args_schema=ListItemsInput,
+        ),
+        StructuredTool.from_function(
             coroutine=update_status,
+            name="update_status",
+            description="Update a board item's status. Valid statuses: backlog, in_progress, review, done.",
+            args_schema=UpdateStatusInput,
         ),
-        Tool(
-            name="add_comment",
-            description="Add a comment to a board item. Input: JSON with item_id and comment text",
-            func=add_comment,
+        StructuredTool.from_function(
             coroutine=add_comment,
+            name="add_comment",
+            description="Add a comment to a board item.",
+            args_schema=AddCommentInput,
         ),
     ]
-    
+
     return tools
 
 
@@ -254,7 +293,17 @@ def get_tools_list(
                 logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
             else:
                 logger.warning(f"⚠️ knowledge_base tool requested but no agent_id provided")
-    
+
+        elif tool_name == "notebook":
+            if user_id:
+                from app.agent.tools.notebook_tool import NotebookTool, NotebookCreateTool
+                tools.append(NotebookTool(user_id=str(user_id)))
+                if db:
+                    tools.append(NotebookCreateTool(user_id=str(user_id), db=db))
+                logger.info(f"✅ Added notebook tools for user {user_id}")
+            else:
+                logger.warning(f"⚠️ notebook tool requested but no user_id provided")
+
     logger.info(f"📦 Prepared {len(tools)} tools: {[t.name for t in tools]}")
     return tools
 
@@ -314,7 +363,17 @@ def bind_tools_to_llm(
                 logger.info(f"✅ Added knowledge_base tool for agent {agent_id}")
             else:
                 logger.warning(f"⚠️ knowledge_base tool requested but no agent_id provided")
-    
+
+        elif tool_name == "notebook":
+            if user_id:
+                from app.agent.tools.notebook_tool import NotebookTool, NotebookCreateTool
+                tools.append(NotebookTool(user_id=str(user_id)))
+                if db:
+                    tools.append(NotebookCreateTool(user_id=str(user_id), db=db))
+                logger.info(f"✅ Added notebook tools for user {user_id}")
+            else:
+                logger.warning(f"⚠️ notebook tool requested but no user_id provided")
+
     if not tools:
         logger.warning("⚠️ No tools to bind!")
         return llm

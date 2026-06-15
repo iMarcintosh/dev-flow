@@ -374,7 +374,7 @@ async def validate_agent_config(agent_data: CustomAgentCreate) -> None:
         raise ValueError("System prompt is too long (maximum 50,000 characters)")
     
     # Validate tools
-    valid_tools = ["board", "web_search", "code_execution", "code_analysis", "knowledge_base", "git"]
+    valid_tools = ["board", "web_search", "code_execution", "code_analysis", "knowledge_base", "git", "weather", "mcp", "notebook"]
     invalid_tools = [tool for tool in agent_data.enabled_tools if tool not in valid_tools]
     if invalid_tools:
         raise ValueError(f"Invalid tools: {', '.join(invalid_tools)}")

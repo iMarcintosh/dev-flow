@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { X, Edit2, BarChart3, Wrench, ScrollText, Clock, CheckCircle2, XCircle, Loader2, Calendar } from 'lucide-react'
-import type { CustomAgent } from '@/types/custom-agent'
+import {
+  X, Edit2, BarChart3, Wrench, ScrollText, Clock, CheckCircle2, XCircle, Loader2, Calendar,
+  MessageSquare, Search, Code, FileText, Trello, Cloud, Plug,
+} from 'lucide-react'
+import type { CustomAgent, AgentConversation } from '@/types/custom-agent'
 import { getAgentSummary, getAgentToolUsage, type AgentSummary, type ToolUsageStat } from '@/services/analytics'
-import { getAgentRuns, type AgentRun } from '@/services/agentRuns'
 import { scheduledRunsService, type ScheduledRun } from '@/services/scheduledRuns'
+import { getAgentConversations } from '@/services/custom-agents'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface AgentDetailsModalProps {
   agent: CustomAgent
@@ -13,6 +18,53 @@ interface AgentDetailsModalProps {
 }
 
 type TabType = 'overview' | 'analytics' | 'tools' | 'activity' | 'scheduled'
+
+// Tool icon mapping — covers both enabled_tools IDs and backend tool_name values
+const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  // Tool-IDs (from enabled_tools / AVAILABLE_TOOLS)
+  web_search: Search,
+  code_execution: Code,
+  knowledge_base: FileText,
+  board: Trello,
+  weather: Cloud,
+  mcp: Plug,
+  // Backend tool_name values (from ToolUsageLog)
+  get_weather: Cloud,
+  execute_code: Code,
+  search_knowledge_base: FileText,
+  read_url: Search,
+  create_task: Trello,
+  update_status: Trello,
+  add_comment: Trello,
+}
+
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  get_weather: 'Weather',
+  execute_code: 'Code Execution',
+  search_knowledge_base: 'Knowledge Base',
+  read_url: 'Web Search',
+  web_search: 'Web Search',
+  create_task: 'Board: Create Task',
+  update_status: 'Board: Update Status',
+  add_comment: 'Board: Add Comment',
+}
+
+const getToolDisplayName = (name: string) =>
+  TOOL_DISPLAY_NAMES[name] ?? name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
+type ConversationTimelineItem = {
+  kind: 'conversation'
+  id: string
+  sortDate: string
+  conversation: AgentConversation
+}
+type ScheduledRunTimelineItem = {
+  kind: 'scheduled_run'
+  id: string
+  sortDate: string
+  run: ScheduledRun
+}
+type ActivityTimelineItem = ConversationTimelineItem | ScheduledRunTimelineItem
 
 export function AgentDetailsModal({ agent, onClose, onEdit }: AgentDetailsModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overview')
@@ -29,9 +81,15 @@ export function AgentDetailsModal({ agent, onClose, onEdit }: AgentDetailsModalP
     queryFn: () => getAgentToolUsage(agent.id, timeRange),
   })
 
-  const { data: runs = [], isLoading: runsLoading } = useQuery({
-    queryKey: ['agent-runs', agent.name],
-    queryFn: () => getAgentRuns(agent.name, 20),
+  const { data: conversations = [], isLoading: conversationsLoading } = useQuery({
+    queryKey: ['agent-conversations', agent.id],
+    queryFn: () => getAgentConversations(agent.id, 20),
+    enabled: activeTab === 'activity',
+  })
+
+  const { data: activityScheduledRuns = [], isLoading: activityRunsLoading } = useQuery({
+    queryKey: ['activity-scheduled-runs', agent.id],
+    queryFn: () => scheduledRunsService.getScheduledRuns(agent.id, 20),
     enabled: activeTab === 'activity',
   })
 
@@ -105,20 +163,23 @@ export function AgentDetailsModal({ agent, onClose, onEdit }: AgentDetailsModalP
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'overview' && <OverviewTab agent={agent} />}
           {activeTab === 'analytics' && (
-            <AnalyticsTab 
-              summary={summary} 
-              isLoading={summaryLoading} 
+            <AnalyticsTab
+              summary={summary}
+              isLoading={summaryLoading}
               timeRange={timeRange}
               onTimeRangeChange={setTimeRange}
             />
           )}
           {activeTab === 'tools' && (
-            <ToolUsageTab toolUsage={toolUsage} isLoading={toolsLoading} />
+            <ToolUsageTab toolUsage={toolUsage} isLoading={toolsLoading} enabledTools={agent.enabled_tools} />
           )}
           {activeTab === 'activity' && (
-            <ActivityLogTab runs={runs} isLoading={runsLoading} />
+            <ActivityLogTab
+              conversations={conversations}
+              scheduledRuns={activityScheduledRuns}
+              isLoading={conversationsLoading || activityRunsLoading}
+            />
           )}
-
           {activeTab === 'scheduled' && (
             <ScheduledRunsTab runs={scheduledRuns} isLoading={scheduledRunsLoading} />
           )}
@@ -219,12 +280,12 @@ function OverviewTab({ agent }: { agent: CustomAgent }) {
 }
 
 // Analytics Tab Component
-function AnalyticsTab({ 
-  summary, 
+function AnalyticsTab({
+  summary,
   isLoading,
   timeRange,
   onTimeRangeChange
-}: { 
+}: {
   summary: AgentSummary | null | undefined
   isLoading: boolean
   timeRange: number
@@ -319,7 +380,7 @@ function AnalyticsTab({
             {(summary.total_tokens || 0).toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
-            Prompt: {(summary.prompt_tokens || 0).toLocaleString()} • 
+            Prompt: {(summary.prompt_tokens || 0).toLocaleString()} •{' '}
             Completion: {(summary.completion_tokens || 0).toLocaleString()}
           </div>
         </div>
@@ -337,7 +398,15 @@ function AnalyticsTab({
 }
 
 // Tool Usage Tab Component
-function ToolUsageTab({ toolUsage, isLoading }: { toolUsage: ToolUsageStat[], isLoading: boolean }) {
+function ToolUsageTab({
+  toolUsage,
+  isLoading,
+  enabledTools,
+}: {
+  toolUsage: ToolUsageStat[]
+  isLoading: boolean
+  enabledTools: string[]
+}) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -347,6 +416,34 @@ function ToolUsageTab({ toolUsage, isLoading }: { toolUsage: ToolUsageStat[], is
   }
 
   if (toolUsage.length === 0) {
+    if (enabledTools.length > 0) {
+      return (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground mb-4">
+            No usage data yet. These tools are configured for this agent:
+          </p>
+          {enabledTools.map((toolName) => {
+            const Icon = TOOL_ICONS[toolName] || Wrench
+            return (
+              <div
+                key={toolName}
+                className="p-4 bg-background border border-border rounded-lg flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <span className="font-medium text-foreground">{getToolDisplayName(toolName)}</span>
+                </div>
+                <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                  Not used yet
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
     return (
       <div className="text-center py-12">
         <Wrench className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
@@ -363,10 +460,10 @@ function ToolUsageTab({ toolUsage, isLoading }: { toolUsage: ToolUsageStat[], is
       {sortedTools.map((tool) => (
         <div key={tool.tool_name} className="p-4 bg-background border border-border rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-medium text-foreground">{tool.tool_name}</div>
+            <div className="font-medium text-foreground">{getToolDisplayName(tool.tool_name)}</div>
             <div className="text-sm text-muted-foreground">{tool.usage_count} uses</div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
@@ -380,7 +477,7 @@ function ToolUsageTab({ toolUsage, isLoading }: { toolUsage: ToolUsageStat[], is
                 />
               </div>
             </div>
-            
+
             {tool.avg_execution_time && (
               <div className="text-sm text-muted-foreground whitespace-nowrap">
                 {tool.avg_execution_time.toFixed(2)}s avg
@@ -394,8 +491,16 @@ function ToolUsageTab({ toolUsage, isLoading }: { toolUsage: ToolUsageStat[], is
 }
 
 // Activity Log Tab Component
-function ActivityLogTab({ runs, isLoading }: { runs: AgentRun[], isLoading: boolean }) {
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+function ActivityLogTab({
+  conversations,
+  scheduledRuns,
+  isLoading,
+}: {
+  conversations: AgentConversation[]
+  scheduledRuns: ScheduledRun[]
+  isLoading: boolean
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -405,78 +510,140 @@ function ActivityLogTab({ runs, isLoading }: { runs: AgentRun[], isLoading: bool
     )
   }
 
-  if (runs.length === 0) {
+  if (conversations.length === 0 && scheduledRuns.length === 0) {
     return (
       <div className="text-center py-12">
         <ScrollText className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-        <p className="text-muted-foreground">No activity logs yet</p>
+        <p className="text-muted-foreground">No activity yet</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Only available for built-in agents (TaskCreator, DailySummary)
+          Chat with this agent or run it on a schedule to see activity here
         </p>
       </div>
     )
   }
 
-  const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: { label: 'Pending', color: 'bg-yellow-500/10 text-yellow-500' },
-      running: { label: 'Running', color: 'bg-blue-500/10 text-blue-500' },
-      done: { label: 'Done', color: 'bg-green-500/10 text-green-500' },
-      failed: { label: 'Failed', color: 'bg-red-500/10 text-red-500' },
-    }
-    return badges[status as keyof typeof badges] || badges.pending
-  }
+  // Merge and sort timeline items
+  const timeline: ActivityTimelineItem[] = [
+    ...conversations.map((conv): ConversationTimelineItem => ({
+      kind: 'conversation',
+      id: conv.id,
+      sortDate: conv.updated_at,
+      conversation: conv,
+    })),
+    ...scheduledRuns.map((run): ScheduledRunTimelineItem => ({
+      kind: 'scheduled_run',
+      id: run.id,
+      sortDate: run.executed_at,
+      run,
+    })),
+  ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
 
   return (
-    <div className="space-y-3">
-      {runs.map((run) => {
-        const badge = getStatusBadge(run.status)
-        const isExpanded = expandedRunId === run.id
-
-        return (
-          <div key={run.id} className="border border-border rounded-lg overflow-hidden">
-            <button
-              onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
-              className="w-full p-4 hover:bg-accent transition-colors text-left"
+    <div className="space-y-2">
+      {timeline.map((item) => {
+        if (item.kind === 'conversation') {
+          const conv = item.conversation
+          return (
+            <div
+              key={`conv-${item.id}`}
+              className="border border-border rounded-lg p-4 flex items-center justify-between gap-4 hover:border-blue-500/50 transition-colors"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs px-2 py-1 rounded ${badge.color}`}>
-                    {badge.label}
-                  </span>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Clock className="w-4 h-4" />
-                    {new Date(run.created_at).toLocaleString()}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/10 text-blue-500 flex-shrink-0">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-medium text-blue-500">CONVERSATION</span>
                   </div>
+                  <p className="text-sm text-foreground truncate">
+                    {conv.title || 'Untitled conversation'}
+                  </p>
                 </div>
               </div>
-            </button>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                  {conv.message_count} messages
+                </span>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  {new Date(conv.updated_at).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        // scheduled_run
+        const run = item.run
+        const isExpanded = expandedId === `run-${run.id}`
+        const isSuccess = run.status === 'success'
+        const StatusIcon = isSuccess ? CheckCircle2 : XCircle
+        const statusColor = isSuccess ? 'text-green-500' : 'text-red-500'
+
+        return (
+          <div
+            key={`run-${item.id}`}
+            className="border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-colors"
+          >
+            <div
+              className="p-4 cursor-pointer flex items-center justify-between gap-4"
+              onClick={() => setExpandedId(isExpanded ? null : `run-${run.id}`)}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <StatusIcon className={`w-4 h-4 flex-shrink-0 ${statusColor}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-xs font-medium ${statusColor}`}>SCHEDULED RUN</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(run.executed_at).toLocaleString()}
+                    </span>
+                  </div>
+                  {run.response && (
+                    <p className="text-sm text-foreground truncate">
+                      {run.response.substring(0, 120)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {run.response_time != null && (
+                  <span className="text-xs text-muted-foreground">{run.response_time.toFixed(2)}s</span>
+                )}
+                {run.tools_used != null && run.tools_used > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Wrench className="w-3 h-3" />
+                    {run.tools_used}
+                  </div>
+                )}
+              </div>
+            </div>
 
             {isExpanded && (
               <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-                {run.input && (
+                {run.input_text && (
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground mb-1">Input:</div>
-                    <pre className="text-xs bg-background p-2 rounded border border-border overflow-x-auto">
-                      {JSON.stringify(run.input, null, 2)}
-                    </pre>
+                    <div className="text-xs bg-background p-3 rounded border border-border">
+                      {run.input_text}
+                    </div>
                   </div>
                 )}
-                
-                {run.output && (
+                {run.response && (
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground mb-1">Output:</div>
-                    <pre className="text-xs bg-background p-2 rounded border border-border overflow-x-auto">
-                      {JSON.stringify(run.output, null, 2)}
-                    </pre>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1">Response:</div>
+                    <div className="text-xs bg-background p-3 rounded border border-border">
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-1 prose-ul:my-1 prose-ol:my-1">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{run.response}</ReactMarkdown>
+                      </div>
+                    </div>
                   </div>
                 )}
-                
-                {run.error_message && (
+                {run.error && (
                   <div>
                     <div className="text-xs font-semibold text-red-500 mb-1">Error:</div>
-                    <div className="text-xs text-red-500 bg-red-500/10 p-2 rounded">
-                      {run.error_message}
+                    <div className="text-xs text-red-500 bg-red-500/10 p-3 rounded">
+                      {run.error}
                     </div>
                   </div>
                 )}
@@ -490,12 +657,12 @@ function ActivityLogTab({ runs, isLoading }: { runs: AgentRun[], isLoading: bool
 }
 
 // Scheduled Runs Tab Component
-function ScheduledRunsTab({ 
-  runs, 
-  isLoading 
-}: { 
+function ScheduledRunsTab({
+  runs,
+  isLoading
+}: {
   runs: ScheduledRun[]
-  isLoading: boolean 
+  isLoading: boolean
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -527,17 +694,17 @@ function ScheduledRunsTab({
         const StatusIcon = run.status === 'success' ? CheckCircle2 : XCircle
 
         return (
-          <div 
+          <div
             key={run.id}
             className="border border-border rounded-lg overflow-hidden hover:border-primary/50 transition-colors"
           >
-            <div 
+            <div
               className="p-4 cursor-pointer flex items-center justify-between gap-4"
               onClick={() => setExpandedId(isExpanded ? null : run.id)}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <StatusIcon className={`w-4 h-4 flex-shrink-0 ${statusColor}`} />
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
                     <span className={`text-xs font-medium ${statusColor}`}>
@@ -547,7 +714,7 @@ function ScheduledRunsTab({
                       {new Date(run.executed_at).toLocaleString()}
                     </span>
                   </div>
-                  
+
                   {run.response && (
                     <p className="text-sm text-foreground truncate">
                       {run.response.substring(0, 100)}...
@@ -557,12 +724,12 @@ function ScheduledRunsTab({
               </div>
 
               <div className="flex items-center gap-4 flex-shrink-0">
-                {run.response_time !== null && (
+                {run.response_time != null && (
                   <div className="text-xs text-muted-foreground">
                     {run.response_time.toFixed(2)}s
                   </div>
                 )}
-                {run.tools_used !== null && run.tools_used > 0 && (
+                {run.tools_used != null && run.tools_used > 0 && (
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Wrench className="w-3 h-3" />
                     {run.tools_used}
@@ -581,16 +748,20 @@ function ScheduledRunsTab({
                     </div>
                   </div>
                 )}
-                
+
                 {run.response && (
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground mb-1">Response:</div>
-                    <div className="text-xs bg-background p-3 rounded border border-border whitespace-pre-wrap">
-                      {run.response}
+                    <div className="text-xs bg-background p-3 rounded border border-border">
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-1 prose-ul:my-1 prose-ol:my-1">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {run.response}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 )}
-                
+
                 {run.error && (
                   <div>
                     <div className="text-xs font-semibold text-red-500 mb-1">Error:</div>

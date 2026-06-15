@@ -30,10 +30,15 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     logger.error(f"Global exception: {exc}")
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"success": False, "error": "Internal server error", "details": str(exc)}
     )
+    origin = request.headers.get("origin")
+    if origin and origin in settings.backend_cors_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 @app.get("/health")
@@ -55,15 +60,17 @@ app.include_router(custom_agents.router)
 app.include_router(agent_chat.router)
 app.include_router(teams.router)
 
-from app.api.routes import knowledge_base, websocket, analytics
+from app.api.routes import knowledge_base, websocket, analytics, notes
 app.include_router(knowledge_base.router)
 app.include_router(websocket.router)
 app.include_router(analytics.router)
+app.include_router(notes.router)
 
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("DevFlow backend starting up...")
+    # Re-indexing is handled by Celery worker startup (celery_app.py setup_agents)
 
 
 @app.on_event("shutdown")

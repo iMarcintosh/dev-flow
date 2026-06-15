@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Float, Text, Enum as SQLEnum, event
+from sqlalchemy import Column, String, DateTime, ForeignKey, Float, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID, JSON, TIMESTAMP
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -57,23 +57,3 @@ class Item(Base):
     creator = relationship("User", foreign_keys=[created_by])
     parent = relationship("Item", remote_side=[id], backref="subtasks")
 
-
-@event.listens_for(Item, 'after_insert')
-def trigger_indexing_on_insert(mapper, connection, target):
-    """Trigger embedding indexing after item creation."""
-    from app.agent.memory.indexer import trigger_item_indexing
-    trigger_item_indexing(str(target.id))
-
-
-@event.listens_for(Item, 'after_update')
-def trigger_indexing_on_update(mapper, connection, target):
-    """Trigger embedding re-indexing after item update."""
-    # Only re-index if relevant fields changed
-    state = target._sa_instance_state
-    history = state.attrs
-    
-    # Check if title, description, or acceptance_criteria changed
-    relevant_fields = ['title', 'description', 'acceptance_criteria', 'type']
-    if any(history[field].history.has_changes() for field in relevant_fields if field in history):
-        from app.agent.memory.indexer import trigger_item_indexing
-        trigger_item_indexing(str(target.id))

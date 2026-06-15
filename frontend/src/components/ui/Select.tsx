@@ -17,6 +17,7 @@ interface SelectProps {
   disabled?: boolean
   className?: string
   forceUpward?: boolean  // Force dropdown to open upward
+  searchable?: boolean   // Show search/filter input in dropdown
 }
 
 export function Select({
@@ -28,21 +29,34 @@ export function Select({
   disabled = false,
   className = '',
   forceUpward = false,
+  searchable = false,
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [openUpward, setOpenUpward] = useState(forceUpward)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Separate refs: containerRef for clickOutside, buttonRef for position, dropdownRef for portal div
+  const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const selectedOption = options.find((opt) => opt.value === value)
+
+  const filteredOptions = searchable && searchQuery
+    ? options.filter(o =>
+        o.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : options
 
   // Calculate dropdown position
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       setDropdownPosition({
-        top: rect.top,
+        top: rect.bottom,
         left: rect.left,
         width: rect.width,
       })
@@ -51,20 +65,37 @@ export function Select({
         setOpenUpward(true)
         return
       }
-      
+
       const spaceBelow = window.innerHeight - rect.bottom
       const spaceAbove = rect.top
       const dropdownHeight = 320 // max-h-80 = 20rem = 320px
-      
+
       // Open upward if not enough space below and more space above
       setOpenUpward(spaceBelow < dropdownHeight && spaceAbove > spaceBelow)
     }
   }, [isOpen, forceUpward])
 
-  // Close dropdown when clicking outside
+  // Reset search when closing
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('')
+    }
+  }, [isOpen])
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (isOpen && searchable && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 50)
+    }
+  }, [isOpen, searchable])
+
+  // Close dropdown when clicking outside (containerRef + dropdownRef)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        !containerRef.current?.contains(event.target as Node) &&
+        !dropdownRef.current?.contains(event.target as Node)
+      ) {
         setIsOpen(false)
       }
     }
@@ -92,7 +123,7 @@ export function Select({
   }
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={`relative ${className}`} ref={containerRef}>
       {label && (
         <label className="block text-sm font-medium text-foreground mb-2">
           {label}
@@ -141,19 +172,32 @@ export function Select({
           />
 
           {/* Options List - Portal ensures it renders above everything */}
-          <div 
+          <div
             ref={dropdownRef}
             className="fixed z-[999] bg-background border border-border rounded-lg shadow-xl max-h-80 overflow-y-auto"
             style={{
               left: `${dropdownPosition.left}px`,
               width: `${dropdownPosition.width}px`,
-              ...(openUpward 
-                ? { bottom: `${window.innerHeight - dropdownPosition.top + 8}px` }
-                : { top: `${dropdownPosition.top + 48}px` }
+              ...(openUpward
+                ? { bottom: `${window.innerHeight - dropdownPosition.top + buttonRef.current!.getBoundingClientRect().height + 8}px` }
+                : { top: `${dropdownPosition.top + 8}px` }
               )
             }}
           >
-            {options.map((option) => (
+            {searchable && (
+              <div className="p-2 border-b border-border sticky top-0 bg-background z-10">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-accent rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+            )}
+            {filteredOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -183,6 +227,9 @@ export function Select({
                 </div>
               </button>
             ))}
+            {filteredOptions.length === 0 && (
+              <div className="px-4 py-3 text-sm text-muted-foreground">No results found.</div>
+            )}
           </div>
         </>,
         document.body

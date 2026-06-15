@@ -1,7 +1,6 @@
 """Auto-indexing for item embeddings."""
 
 import logging
-import asyncio
 from sqlalchemy.orm import Session
 
 from app.models.item import Item
@@ -26,14 +25,16 @@ def index_item_task(item_id: str):
         
         # Format text for embedding
         text = embedding_service.format_item_for_embedding(
-            item_type=item.type,
+            item_type=item.type.value,
             title=item.title,
             description=item.description,
-            acceptance_criteria=item.acceptance_criteria
+            acceptance_criteria=item.acceptance_criteria,
+            status=item.status.value,
+            priority=item.priority.value
         )
         
-        # Generate embedding (use asyncio.run for async function)
-        embedding = asyncio.run(embedding_service.embed_text(text))
+        # Generate embedding
+        embedding = embedding_service.embed_text(text)
         
         # Update item
         item.embedding = embedding
@@ -64,16 +65,18 @@ def index_all_project_items_task(project_id: str):
         # Generate embeddings in batch
         texts = [
             embedding_service.format_item_for_embedding(
-                item_type=item.type,
+                item_type=item.type.value,
                 title=item.title,
                 description=item.description,
-                acceptance_criteria=item.acceptance_criteria
+                acceptance_criteria=item.acceptance_criteria,
+                status=item.status.value,
+                priority=item.priority.value
             )
             for item in items
         ]
         
-        # Generate embeddings (use asyncio.run for async function)
-        embeddings = asyncio.run(embedding_service.embed_batch(texts))
+        # Generate embeddings
+        embeddings = embedding_service.embed_batch(texts)
         
         # Update all items
         for item, embedding in zip(items, embeddings):
@@ -99,3 +102,20 @@ def trigger_item_indexing(item_id: str):
     logger.debug(f"Triggered indexing for item {item_id}")
 
 
+@celery_app.task(name="index_missing_embeddings")
+def index_missing_embeddings_task():
+    """Index all items that don't have embeddings yet."""
+    db = SessionLocal()
+    try:
+        items = db.query(Item).filter(Item.embedding.is_(None)).all()
+        logger.info(f"Re-indexing {len(items)} items without embeddings")
+        for item in items:
+            index_item_task.delay(str(item.id))
+    finally:
+        db.close()
+
+
+def trigger_reindex_missing():
+    """Trigger indexing for all items without embeddings."""
+    index_missing_embeddings_task.delay()
+    logger.info("Triggered re-indexing of items without embeddings")

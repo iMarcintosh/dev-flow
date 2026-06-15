@@ -1,6 +1,6 @@
 # 🤖 DevFlow Agenten - Komplette Anleitung
 
-## 📊 Aktueller Status (Stand: 2026-02-18)
+## 📊 Aktueller Status (Stand: 2026-02-23)
 
 **✅ Vollständig implementierte Features:**
 
@@ -689,6 +689,12 @@ GPT-4o:
 ---
 
 ## 📝 Changelog
+
+### 2026-02-23: Agent Chat Bug Fixes
+- 🐛 Fixed: User message not visible after sending (optimistic update added)
+- 🐛 Fixed: Long conversations showing oldest 100 messages instead of newest 100
+- ✨ `AgentChatPage.tsx`: optimistic cache update before stream starts
+- ✨ `conversation_service.py`: query orders DESC + limit, reverses for display
 
 ### 2026-02-18: Agent Cards UI & Token Tracking
 - ✨ Moderne Card-UI mit Icon-basierten Stats

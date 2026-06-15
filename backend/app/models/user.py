@@ -36,7 +36,8 @@ class User(Base):
     team_memberships = relationship("TeamMember", back_populates="user")
     custom_agents = relationship("CustomAgent", back_populates="user")
     agent_conversations = relationship("AgentConversation", back_populates="user")
-    
+    notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+
     @property
     def anthropic_api_key(self) -> str | None:
         """Decrypt and return Anthropic API key."""

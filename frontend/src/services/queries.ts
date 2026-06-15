@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/services/api'
 import { Item, CreateItemData, UpdateItemData, Project, ItemStatus } from '@/types'
 import type { ChatMessage, ChatResponse } from '@/types/chat'
+import { useAuthStore } from '@/stores/authStore'
 
 export const useProjects = () => {
   return useQuery({
@@ -166,7 +167,7 @@ export const useChatHistory = (projectId: string | undefined) => {
 
 export const useSendChatMessage = () => {
   const queryClient = useQueryClient()
-  
+
   return useMutation({
     mutationFn: async ({ projectId, message }: { projectId: string; message: string }) => {
       const { data } = await api.post<ChatResponse>('/api/chat/', {
@@ -177,6 +178,16 @@ export const useSendChatMessage = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['chat', variables.projectId] })
+    },
+  })
+}
+
+export const useClearChatHistory = (projectId: string) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.delete(`/api/chat/history?project_id=${projectId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat', projectId] })
     },
   })
 }
@@ -195,13 +206,15 @@ export const useAvailableModels = () => {
 
 export const useUpdateUserPreferences = () => {
   const queryClient = useQueryClient()
-  
+  const updateUser = useAuthStore((state) => state.updateUser)
+
   return useMutation({
     mutationFn: async (preferences: Record<string, string>) => {
       const response = await api.patch('/api/auth/me/preferences', preferences)
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      updateUser({ preferred_models: data.preferred_models })
       queryClient.invalidateQueries({ queryKey: ['user'] })
     },
   })

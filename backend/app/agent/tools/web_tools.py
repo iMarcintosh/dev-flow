@@ -1,52 +1,54 @@
 """Real web tools implementation for custom agents."""
 
 import logging
+import os
 from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 from langchain_core.tools import tool
-from duckduckgo_search import DDGS
 
 logger = logging.getLogger(__name__)
 
 
 @tool
 def web_search(query: str, max_results: int = 5) -> str:
-    """
-    Search the web using DuckDuckGo.
-    
-    Args:
-        query: The search query
-        max_results: Maximum number of results to return (default: 5, max: 10)
-    
-    Returns:
-        Formatted search results with titles, URLs, and snippets
-    """
+    """Search the web for information. Returns titles, URLs, and snippets."""
+    max_results = min(max_results, 10)
+
+    searxng_url = os.environ.get("SEARXNG_URL", "http://searxng:8080")
+
     try:
-        max_results = min(max_results, 10)  # Limit to 10
-        
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-        
+        with httpx.Client(timeout=15.0) as client:
+            response = client.get(
+                f"{searxng_url}/search",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "categories": "general",
+                    "language": "de-DE",
+                    "pageno": 1,
+                },
+                headers={"Accept": "application/json"},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        results = data.get("results", [])[:max_results]
         if not results:
-            return f"No results found for query: {query}"
-        
-        # Format results
-        formatted = f"Search results for '{query}':\n\n"
-        for i, result in enumerate(results, 1):
-            title = result.get('title', 'No title')
-            url = result.get('href', '')
-            snippet = result.get('body', '')
-            
-            formatted += f"{i}. {title}\n"
-            formatted += f"   URL: {url}\n"
-            formatted += f"   {snippet}\n\n"
-        
-        return formatted
-        
+            return f"No results found for: {query}"
+
+        formatted = []
+        for i, r in enumerate(results, 1):
+            formatted.append(
+                f"{i}. {r.get('title', 'No title')}\n"
+                f"   URL: {r.get('url', '')}\n"
+                f"   {r.get('content', '')}"
+            )
+        return "\n\n".join(formatted)
+
     except Exception as e:
         logger.error(f"Web search error: {e}")
-        return f"Error performing search: {str(e)}"
+        return f"Search error: {str(e)}"
 
 
 @tool

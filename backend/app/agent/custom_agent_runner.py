@@ -13,13 +13,27 @@ from sqlalchemy import select
 import logging
 import json
 
+from langgraph.prebuilt import create_react_agent
+from langgraph.errors import GraphRecursionError
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage, AIMessageChunk
+
 from app.models.custom_agent import CustomAgent
 from app.agent.model_resolver import create_llm
 from app.agent.tools.tool_registry import bind_tools_to_llm
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
+from app.agent.utils import _collect_token_usage
 from langchain_core.tools import BaseTool
+from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+_LANGGRAPH_RECURSION_MSG = "Sorry, need more steps to process this request."
+
+
+def _get_postgres_conn_string() -> str:
+    """Convert asyncpg URL to psycopg3 format for LangGraph checkpointer."""
+    url = settings.database_url
+    # postgresql+asyncpg://user:pass@host:port/db → postgresql://user:pass@host:port/db
+    return url.replace("postgresql+asyncpg://", "postgresql://")
 
 
 async def run_custom_agent(
@@ -65,129 +79,60 @@ async def run_custom_agent(
         max_tokens=agent.max_tokens,
     )
     
-    # Note: Not setting top_p as both OpenAI and Anthropic reject
-    # requests with both temperature AND top_p set
-    
-    # Bind tools if enabled
-    if agent.enabled_tools:
-        logger.info(f"🔧 Binding tools to LLM: {agent.enabled_tools}")
-        
-        from app.agent.tools.tool_registry import get_tools_list
-        
-        # Get tools list
-        tools = get_tools_list(
-            tool_names=agent.enabled_tools,
-            db=db,
-            user_id=str(user_id),
-            project_id=str(project_id) if project_id else None,
-            agent_id=str(agent_id),
-        )
-        
-        if tools:
-            # All modern LLMs support bind_tools (OpenAI, Anthropic, etc.)
-            llm = llm.bind_tools(tools)
-            logger.info(f"✅ Tools bound using bind_tools() - {len(tools)} tools")
-        else:
-            logger.warning("⚠️ No tools to bind!")
-    
-    # Create messages with system prompt
-    messages = [
-        SystemMessage(content=agent.system_prompt),
-        HumanMessage(content=input_text),
-    ]
-    
-    # TODO: Add conversation history if conversation_id provided
-    
     # Execute agent
     start_time = datetime.now()
     success = False
     tools_used = []
     tools_list = []
-    
+
     # Get tools list for execution (if enabled)
     if agent.enabled_tools:
         from app.agent.tools.tool_registry import get_tools_list
         tools_list = get_tools_list(
-            tool_names=agent.enabled_tools,
+            tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
         )
+        # Async-load MCP tools for execution
+        if "mcp" in agent.enabled_tools:
+            from app.agent.tools.mcp_integration import get_mcp_tools
+            mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+            if mcp_configs:
+                mcp_tools = await get_mcp_tools(mcp_configs)
+                tools_list.extend(mcp_tools)
     
     try:
-        # Phase 1: Initial LLM invocation (planning)
-        logger.info(f"🤖 Phase 1: Calling LLM (planning)")
-        response = await llm.ainvoke(messages)
-        
-        # Phase 2: Check if tool calls are requested
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            logger.info(f"🔧 Phase 2: Tool calls detected: {len(response.tool_calls)}")
-            
-            # Add AI message with tool calls
-            messages.append(AIMessage(
-                content=response.content or "",
-                tool_calls=response.tool_calls
-            ))
-            
-            # Execute each tool call
-            for tool_call in response.tool_calls:
-                tool_name = tool_call.get("name")
-                tool_args = tool_call.get("args", {})
-                tool_id = tool_call.get("id")
-                
-                logger.info(f"  🛠️  Executing tool: {tool_name} with args: {tool_args}")
-                
-                try:
-                    # Find tool in tools list
-                    tool = _find_tool_by_name(tool_name, tools_list)
-                    
-                    if tool:
-                        # Execute tool
-                        tool_result = await tool.ainvoke(tool_args)
-                        
-                        # Convert result to string if needed
-                        if isinstance(tool_result, dict):
-                            result_str = json.dumps(tool_result)
-                        else:
-                            result_str = str(tool_result)
-                        
-                        logger.info(f"  ✅ Tool result: {result_str[:100]}...")
-                        
-                        # Add to tools_used tracking
-                        tools_used.append(tool_name)
-                        
-                        # Add tool result message
-                        messages.append(ToolMessage(
-                            content=result_str,
-                            tool_call_id=tool_id
-                        ))
-                    else:
-                        error_msg = f"Tool '{tool_name}' not found in enabled tools"
-                        logger.error(f"  ❌ {error_msg}")
-                        messages.append(ToolMessage(
-                            content=json.dumps({"error": error_msg}),
-                            tool_call_id=tool_id
-                        ))
-                        
-                except Exception as tool_error:
-                    error_msg = f"Tool execution error: {str(tool_error)}"
-                    logger.error(f"  ❌ {error_msg}")
-                    messages.append(ToolMessage(
-                        content=json.dumps({"error": error_msg}),
-                        tool_call_id=tool_id
-                    ))
-            
-            # Phase 3: Final LLM call with tool results
-            logger.info(f"🎯 Phase 3: Calling LLM with tool results (finalization)")
-            final_response = await llm.ainvoke(messages)
-            response_content = final_response.content
-            
-        else:
-            # No tool calls - use direct response
-            logger.info(f"💬 No tool calls - using direct response")
-            response_content = response.content
-        
+        # Build LangGraph agent (tools are bound internally)
+        # Pass system_prompt via prompt= so it's injected as a pre-prompt by the
+        # framework and NOT stored in the thread history (avoids accumulation).
+        agent_executor = create_react_agent(llm, tools=tools_list, prompt=agent.system_prompt or "")
+
+        logger.info(f"🤖 Invoking LangGraph agent")
+        result = await agent_executor.ainvoke(
+            {
+                "messages": [
+                    HumanMessage(content=input_text),
+                ]
+            },
+            config={"recursion_limit": 10},
+        )
+
+        # Extract last AI message as the final response
+        last_ai_msg = next(
+            (m for m in reversed(result["messages"]) if isinstance(m, AIMessage)),
+            None,
+        )
+        response_content = _extract_text_content(last_ai_msg.content) if last_ai_msg else ""
+
+        # Collect tool names from message history
+        tools_used = [
+            m.name
+            for m in result["messages"]
+            if isinstance(m, ToolMessage) and getattr(m, "name", None)
+        ]
+
         success = True
         
         # Update usage stats
@@ -310,14 +255,22 @@ async def run_custom_agent_streaming(
     
     # Bind tools if enabled
     if agent.enabled_tools:
-        llm = bind_tools_to_llm(
-            llm=llm,
-            tool_names=agent.enabled_tools,
+        from app.agent.tools.tool_registry import get_tools_list
+        stream_tools = get_tools_list(
+            tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
         )
+        if "mcp" in agent.enabled_tools:
+            from app.agent.tools.mcp_integration import get_mcp_tools
+            mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+            if mcp_configs:
+                mcp_tools = await get_mcp_tools(mcp_configs)
+                stream_tools.extend(mcp_tools)
+        if stream_tools:
+            llm = llm.bind_tools(stream_tools)
     
     # Create messages with system prompt
     messages = [
@@ -342,18 +295,311 @@ async def run_custom_agent_streaming(
         yield f"\n\n❌ Error: {str(e)}"
 
 
+async def run_custom_agent_sse(
+    db: AsyncSession,
+    agent_id: UUID,
+    user_id: UUID,
+    input_text: str,
+    project_id: Optional[UUID] = None,
+    conversation_id: Optional[UUID] = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Execute a custom agent with SSE streaming.
+
+    Yields SSE-formatted strings with event types:
+      {"type":"start"}
+      {"type":"tool_call","name":"...","args":{...}}
+      {"type":"tool_result","name":"...","duration_ms":...}
+      {"type":"stream","content":"token"}
+      {"type":"end","tools_used":[...],"model":"..."}
+      {"type":"error","error":"..."}
+    """
+    # Load agent configuration
+    result = await db.execute(
+        select(CustomAgent).where(CustomAgent.id == agent_id)
+    )
+    agent = result.scalar_one_or_none()
+
+    if not agent:
+        yield f'data: {json.dumps({"type": "error", "error": "Agent not found"})}\n\n'
+        return
+
+    if agent.visibility == "private" and agent.user_id != user_id:
+        yield f'data: {json.dumps({"type": "error", "error": "Access denied"})}\n\n'
+        return
+
+    yield f'data: {json.dumps({"type": "start"})}\n\n'
+
+    start_time = datetime.now()
+    tools_used: List[str] = []
+
+    try:
+        # Create LLM
+        llm = await create_llm(
+            model_name=agent.model_name,
+            user_id=user_id,
+            temperature=agent.temperature,
+            max_tokens=agent.max_tokens,
+        )
+
+        # Resolve project_id: use conversation's project, fall back to user's first project
+        resolved_project_id = project_id
+        if not resolved_project_id and agent.enabled_tools and "board" in agent.enabled_tools:
+            from app.models.project import Project
+            proj_result = await db.execute(
+                select(Project).where(Project.owner_id == user_id).limit(1)
+            )
+            first_project = proj_result.scalar_one_or_none()
+            if first_project:
+                resolved_project_id = first_project.id
+                logger.info(f"📋 Board tool: resolved project_id to {resolved_project_id}")
+            else:
+                logger.warning("⚠️ Board tool enabled but no project found for user")
+
+        # Get tools list
+        tools_list: List[BaseTool] = []
+        if agent.enabled_tools:
+            from app.agent.tools.tool_registry import get_tools_list
+            tools_list = get_tools_list(
+                tool_names=[t for t in agent.enabled_tools if t != "mcp"],
+                db=db,
+                user_id=str(user_id),
+                project_id=str(resolved_project_id) if resolved_project_id else None,
+                agent_id=str(agent_id),
+            )
+            # Async-load MCP tools if requested
+            if "mcp" in agent.enabled_tools:
+                from app.agent.tools.mcp_integration import get_mcp_tools
+                mcp_configs = (agent.tool_config or {}).get("mcp", {}).get("servers", [])
+                if mcp_configs:
+                    mcp_tools = await get_mcp_tools(mcp_configs)
+                    tools_list.extend(mcp_tools)
+                else:
+                    logger.warning("⚠️ mcp tool enabled but no mcp_configs in tool_config")
+        # Build LangGraph agent with Postgres checkpointer for native conversation memory
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langchain_core.messages import AIMessage as LCAIMessage
+
+        messages_input = [
+            HumanMessage(content=input_text),
+        ]
+
+        logger.info("🤖 SSE: Starting LangGraph agent stream")
+        full_content = ""
+        # tool_call_chunks accumulator: id -> {name, args_str, start_time}
+        pending_tool_calls: dict = {}
+        # Track ToolMessage IDs already emitted to suppress duplicate chunks
+        emitted_tool_results: set = set()
+        # Track the final state to extract the complete AI response after tool calls
+        final_state_messages: list = []
+
+        # The async with block must wrap the entire stream so the checkpointer
+        # connection stays open during all astream iterations.
+        async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+            await checkpointer.setup()  # idempotent: CREATE TABLE IF NOT EXISTS
+
+            # Pass system_prompt via prompt= so it's injected by the framework
+            # and NOT stored in the Postgres thread history (avoids accumulation
+            # of duplicate SystemMessages across turns).
+            agent_executor = create_react_agent(
+                llm,
+                tools=tools_list,
+                prompt=agent.system_prompt or "",
+                checkpointer=checkpointer,
+            )
+
+            run_config = {
+                "recursion_limit": 10,
+                "configurable": {"thread_id": str(conversation_id) if conversation_id else str(agent_id)},
+            }
+
+            async for event in agent_executor.astream(
+                {"messages": messages_input},
+                stream_mode=["messages", "values"],
+                config=run_config,
+            ):
+                mode, data = event
+
+                if mode == "values":
+                    # State snapshot — keep the latest for final answer extraction
+                    final_state_messages = data.get("messages", [])
+                    continue
+
+                # mode == "messages": data is (msg, metadata)
+                msg, metadata = data
+
+                if isinstance(msg, AIMessageChunk):
+                    # Accumulate tool-call chunks (name + args arrive in separate chunks)
+                    if msg.tool_call_chunks:
+                        for chunk in msg.tool_call_chunks:
+                            # Use index as stable key — id only appears in the first chunk
+                            idx = str(chunk.get("index", "0"))
+                            tool_id = chunk.get("id") or ""
+                            name = chunk.get("name") or ""
+                            args_str = chunk.get("args") or ""
+
+                            if idx not in pending_tool_calls:
+                                pending_tool_calls[idx] = {
+                                    "tool_id": tool_id,
+                                    "name": name,
+                                    "args_str": args_str,
+                                    "start_time": datetime.now(),
+                                }
+                            else:
+                                if tool_id:
+                                    pending_tool_calls[idx]["tool_id"] = tool_id
+                                if name:
+                                    pending_tool_calls[idx]["name"] = name
+                                pending_tool_calls[idx]["args_str"] += args_str
+
+                    # Final text stream (no tool calls in this chunk)
+                    elif msg.content:
+                        text = _extract_text_content(msg.content)
+                        if text:
+                            full_content += text
+                            yield f'data: {json.dumps({"type": "stream", "content": text})}\n\n'
+
+                elif isinstance(msg, ToolMessage):
+                    tool_call_id = getattr(msg, "tool_call_id", None) or ""
+                    # Suppress duplicate ToolMessage chunks for the same call
+                    if tool_call_id in emitted_tool_results:
+                        continue
+                    emitted_tool_results.add(tool_call_id)
+
+                    # Find the pending entry whose tool_id matches this ToolMessage's tool_call_id
+                    matched_idx = next(
+                        (idx for idx, info in pending_tool_calls.items()
+                         if info["tool_id"] == tool_call_id),
+                        None,
+                    )
+                    if matched_idx is not None:
+                        info = pending_tool_calls.pop(matched_idx)
+                        tool_name = info["name"] or getattr(msg, "name", None) or "unknown"
+                        try:
+                            args_parsed = json.loads(info["args_str"]) if info["args_str"] else {}
+                        except Exception:
+                            args_parsed = {}
+                        duration_ms = int((datetime.now() - info["start_time"]).total_seconds() * 1000)
+                        yield f'data: {json.dumps({"type": "tool_call", "name": tool_name, "args": args_parsed})}\n\n'
+                    else:
+                        tool_name = getattr(msg, "name", None) or "unknown"
+                        duration_ms = 0
+
+                    if tool_name not in tools_used:
+                        tools_used.append(tool_name)
+                    yield f'data: {json.dumps({"type": "tool_result", "name": tool_name, "duration_ms": duration_ms})}\n\n'
+
+        # Extract final answer from the state snapshot if stream missed it
+        # This happens when the last AI response after tool calls comes as a complete AIMessage
+        # rather than streaming AIMessageChunk events
+        if final_state_messages:
+            last_msg = final_state_messages[-1]
+            if isinstance(last_msg, LCAIMessage):
+                final_text = _extract_text_content(last_msg.content) if last_msg.content else ""
+                if _LANGGRAPH_RECURSION_MSG in final_text:
+                    logger.warning("⚠️ Agent hit recursion limit (detected in final state)")
+                    user_msg = ("Der Agent hat das maximale Limit an Tool-Aufrufen erreicht. "
+                                "Bitte stelle eine spezifischere Frage.")
+                    yield f'data: {json.dumps({"type": "stream", "content": user_msg})}\n\n'
+                    full_content = (full_content + "\n\n" + user_msg).strip() if full_content else user_msg
+                else:
+                    if final_text and final_text != full_content:
+                        # The final answer is more complete than what was streamed
+                        if final_text.startswith(full_content):
+                            # Append only the missing suffix
+                            additional = final_text[len(full_content):]
+                        else:
+                            # Completely different — use the full final text
+                            additional = final_text
+                        if additional:
+                            yield f'data: {json.dumps({"type": "stream", "content": additional})}\n\n'
+                        full_content = final_text
+
+        logger.info(f"🤖 SSE: Stream complete, full_content length={len(full_content)}")
+
+        # Collect real token usage from all AIMessage turns
+        tokens_used = _collect_token_usage(final_state_messages)
+
+        # Persist to DB
+        if conversation_id:
+            from app.services import conversation_service
+            await conversation_service.add_message(
+                db=db,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=full_content,
+                metadata={"model": agent.model_name, "tools_used": tools_used},
+            )
+
+        # Update usage stats
+        from sqlalchemy.sql import func
+        agent.last_used_at = func.now()
+        await db.commit()
+
+        # Track analytics
+        response_time = (datetime.now() - start_time).total_seconds()
+        from app.services.analytics import analytics_service
+        await analytics_service.track_agent_run(
+            db=db,
+            agent_id=agent_id,
+            user_id=user_id,
+            success=True,
+            response_time=response_time,
+            tools_used=tools_used,
+            tokens_used=tokens_used,
+        )
+
+        yield f'data: {json.dumps({"type": "end", "tools_used": tools_used, "model": agent.model_name})}\n\n'
+
+    except GraphRecursionError:
+        logger.warning("⚠️ Agent hit GraphRecursionError")
+        user_msg = ("Der Agent hat das maximale Limit an Tool-Aufrufen erreicht. "
+                    "Bitte stelle eine spezifischere Frage.")
+        suffix = ("\n\n" + user_msg) if full_content else user_msg
+        full_content = (full_content + suffix).strip()
+        yield f'data: {json.dumps({"type": "stream", "content": suffix.strip()})}\n\n'
+        if conversation_id:
+            from app.services import conversation_service
+            await conversation_service.add_message(
+                db=db, conversation_id=conversation_id, role="assistant",
+                content=full_content,
+                metadata={"model": agent.model_name, "tools_used": tools_used},
+            )
+        yield f'data: {json.dumps({"type": "end", "tools_used": tools_used, "model": agent.model_name})}\n\n'
+
+    except Exception as e:
+        logger.error(f"SSE agent error: {e}")
+        # Track failed run
+        response_time = (datetime.now() - start_time).total_seconds()
+        try:
+            from app.services.analytics import analytics_service
+            await analytics_service.track_agent_run(
+                db=db,
+                agent_id=agent_id,
+                user_id=user_id,
+                success=False,
+                response_time=response_time,
+            )
+        except Exception:
+            pass
+        yield f'data: {json.dumps({"type": "error", "error": str(e)})}\n\n'
+
+
 def _find_tool_by_name(name: str, tools: List[BaseTool]) -> Optional[BaseTool]:
-    """
-    Find a tool by its name in the tools list.
-    
-    Args:
-        name: Name of the tool to find
-        tools: List of available tools
-    
-    Returns:
-        The tool if found, None otherwise
-    """
+    """Find a tool by its name in the tools list."""
     for tool in tools:
         if tool.name == name:
             return tool
     return None
+
+
+def _extract_text_content(content) -> str:
+    """Extract plain text from LLM content — handles str and Anthropic list format."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return ''.join(
+            block.get('text', '') if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    return str(content) if content else ''

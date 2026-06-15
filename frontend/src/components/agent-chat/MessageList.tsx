@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Bot, User } from 'lucide-react'
+import { Loader2, Bot, User, Check, Loader } from 'lucide-react'
 import { conversationService } from '@/services/custom-agents'
 import type { AgentMessage } from '@/types/custom-agent'
 import ReactMarkdown from 'react-markdown'
@@ -8,45 +8,43 @@ import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
+const TOOL_ICONS: Record<string, string> = {
+  web_search: '🔍',
+  code_execution: '💻',
+  knowledge_base: '📚',
+  weather: '🌤',
+  board: '📋',
+}
+
+interface ActiveTool {
+  name: string
+  done: boolean
+  duration_ms?: number
+}
+
 interface MessageListProps {
   conversationId: string
   agentId: string
+  hasError?: boolean
+  isStreaming?: boolean
+  streamingContent?: string
+  activeTools?: ActiveTool[]
 }
 
-export function MessageList({ conversationId }: MessageListProps) {
+export function MessageList({
+  conversationId,
+  hasError,
+  isStreaming,
+  streamingContent,
+  activeTools = [],
+}: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [isThinking, setIsThinking] = useState(false)
-  const prevMessageCountRef = useRef(0)
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['conversation-messages', conversationId],
     queryFn: () => conversationService.getMessages(conversationId),
-    refetchInterval: 2000, // Poll every 2 seconds for new messages
+    // No refetchInterval — streaming handles real-time updates
   })
-
-  // Track if agent is thinking (user sent message but no assistant response yet)
-  useEffect(() => {
-    if (messages.length === 0) {
-      setIsThinking(false)
-      prevMessageCountRef.current = 0
-      return
-    }
-
-    const lastMessage = messages[messages.length - 1]
-    const isUserMessage = lastMessage.role === 'user'
-    
-    // If new user message was added, show thinking
-    if (messages.length > prevMessageCountRef.current && isUserMessage) {
-      setIsThinking(true)
-    }
-    
-    // If assistant responded OR if there was an error, hide thinking
-    if (!isUserMessage) {
-      setIsThinking(false)
-    }
-    
-    prevMessageCountRef.current = messages.length
-  }, [messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -54,7 +52,7 @@ export function MessageList({ conversationId }: MessageListProps) {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, streamingContent, isStreaming])
 
   if (isLoading) {
     return (
@@ -66,13 +64,13 @@ export function MessageList({ conversationId }: MessageListProps) {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      {messages.length === 0 && (
-        <div className="text-center py-12">
-          <Bot className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-          <p className="text-muted-foreground">Start a conversation!</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Ask me anything or request help with your tasks.
-          </p>
+      {messages.length === 0 && !isStreaming && (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-violet-600/20 to-purple-800/20 border border-primary/20 flex items-center justify-center">
+            <Bot className="w-8 h-8 text-primary/50" />
+          </div>
+          <p className="text-foreground font-medium">Start a conversation</p>
+          <p className="text-sm text-muted-foreground mt-1">Ask me anything or request help with your tasks.</p>
         </div>
       )}
 
@@ -80,8 +78,25 @@ export function MessageList({ conversationId }: MessageListProps) {
         <MessageBubble key={message.id} message={message} />
       ))}
 
-      {/* Thinking indicator */}
-      {isThinking && <ThinkingIndicator />}
+      {/* Streaming bubble */}
+      {isStreaming && (
+        <StreamingMessageBubble content={streamingContent ?? ''} activeTools={activeTools} />
+      )}
+
+      {hasError && !isStreaming && (
+        <div className="flex gap-3 animate-message-in">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-600 to-purple-800">
+            <Bot className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 max-w-[70%]">
+            <div className="rounded-lg px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <p className="text-sm text-red-600 dark:text-red-400">
+                An error occurred. Please try again.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div ref={messagesEndRef} />
     </div>
@@ -94,7 +109,6 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user'
-  // Detect dark mode from CSS
   const [isDarkMode, setIsDarkMode] = useState(
     window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
   )
@@ -107,17 +121,19 @@ function MessageBubble({ message }: MessageBubbleProps) {
   }, [])
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex gap-3 ${isUser ? 'animate-user-message-fly-in flex-row-reverse' : 'animate-message-in'}`}>
       {/* Avatar */}
       <div
         className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-          isUser ? 'bg-primary' : 'bg-accent'
+          isUser
+            ? 'bg-primary'
+            : 'bg-gradient-to-br from-violet-600 to-purple-800'
         }`}
       >
         {isUser ? (
           <User className="w-4 h-4 text-primary-foreground" />
         ) : (
-          <Bot className="w-4 h-4 text-foreground" />
+          <Bot className="w-4 h-4 text-white" />
         )}
       </div>
 
@@ -137,7 +153,6 @@ function MessageBubble({ message }: MessageBubbleProps) {
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  // Custom table styling
                   table({ children }) {
                     return (
                       <div className="my-4 overflow-x-auto">
@@ -164,21 +179,18 @@ function MessageBubble({ message }: MessageBubbleProps) {
                       </td>
                     )
                   },
-                  // Custom code block styling
                   code({ node, inline, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || '')
                     const language = match ? match[1] : ''
                     const codeString = String(children).replace(/\n$/, '')
-                    
+
                     return !inline && language ? (
                       <div className="my-4 rounded-lg overflow-hidden border border-border">
-                        {/* Language label */}
                         <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
                           <span className="text-xs font-medium text-muted-foreground uppercase">
                             {language}
                           </span>
                         </div>
-                        {/* Code with line numbers */}
                         <SyntaxHighlighter
                           language={language}
                           style={isDarkMode ? vscDarkPlus : vs}
@@ -226,22 +238,65 @@ function MessageBubble({ message }: MessageBubbleProps) {
   )
 }
 
-function ThinkingIndicator() {
+interface StreamingMessageBubbleProps {
+  content: string
+  activeTools: ActiveTool[]
+}
+
+function StreamingMessageBubble({ content, activeTools }: StreamingMessageBubbleProps) {
+  const showThinking = activeTools.length === 0 && !content
+
   return (
-    <div className="flex gap-3">
-      {/* Avatar */}
-      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-accent">
-        <Bot className="w-4 h-4 text-foreground" />
+    <div className="flex gap-3 animate-message-in">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-600 to-purple-800 animate-pulse-soft">
+        <Bot className="w-4 h-4 text-white" />
       </div>
 
-      {/* Thinking animation */}
       <div className="flex-1 max-w-[70%] flex flex-col">
-        <div className="rounded-lg px-4 py-3 bg-card border border-border">
-          <div className="flex gap-1.5 items-center">
-            <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-            <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-            <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-          </div>
+        <div className="rounded-lg px-4 py-3 bg-card border border-border text-foreground">
+          {/* Tool badges */}
+          {activeTools.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {activeTools.map((tool, i) =>
+                tool.done ? (
+                  <div
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-green-500/10 border border-green-500/30 text-green-400 transition-all"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
+                    <span>{tool.name}</span>
+                    {tool.duration_ms !== undefined && (
+                      <span className="opacity-60">{(tool.duration_ms / 1000).toFixed(1)}s</span>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-primary/10 border border-primary/30 text-primary animate-pulse-border"
+                  >
+                    <Loader className="w-3 h-3 animate-spin" />
+                    <span>{TOOL_ICONS[tool.name] ?? '🔧'}</span>
+                    <span>{tool.name}</span>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Streaming text or thinking indicator */}
+          {content ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              <span className="inline-block w-0.5 h-[1em] bg-primary animate-cursor ml-0.5 align-text-bottom" />
+            </div>
+          ) : showThinking ? (
+            <div className="flex items-center gap-2 py-2">
+              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-1 inline-block" />
+              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-2 inline-block" />
+              <span className="w-2 h-2 rounded-full bg-primary/70 typing-dot-3 inline-block" />
+            </div>
+          ) : null}
         </div>
         <p className="text-xs text-muted-foreground mt-1">Thinking...</p>
       </div>

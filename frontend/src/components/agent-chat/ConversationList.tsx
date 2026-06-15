@@ -88,10 +88,10 @@ function ConversationItem({ conversation, isSelected, onSelect, onDelete }: Conv
   return (
     <div
       onClick={onSelect}
-      className={`group relative p-3 rounded-lg cursor-pointer transition-colors ${
+      className={`group relative p-3 rounded-lg cursor-pointer transition-all duration-150 ${
         isSelected
-          ? 'bg-primary/10 border border-primary/50'
-          : 'hover:bg-accent border border-transparent'
+          ? 'bg-primary/10 border border-primary/30 pl-4 border-l-2 border-l-primary'
+          : 'hover:bg-accent border border-transparent pl-4'
       }`}
     >
       <div className="flex items-start justify-between gap-2">

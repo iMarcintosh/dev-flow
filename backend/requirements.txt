@@ -23,6 +23,7 @@ authlib==1.3.0
 # Queue & Cache
 redis==5.0.1
 celery==5.3.6
+celery-redbeat==2.2.0
 
 # LangChain Stack - Let pip resolve
 langchain
@@ -31,7 +32,11 @@ langchain-community
 langchain-openai
 langchain-anthropic
 langgraph
+langgraph-checkpoint-postgres
 langchain-text-splitters
+
+# psycopg3 — required by langgraph-checkpoint-postgres (psycopg2-binary kept for Celery/SQLAlchemy)
+psycopg[binary,pool]
 
 # Vector DB - Updated chromadb
 pgvector==0.2.4
@@ -48,6 +53,7 @@ lxml
 
 # MCP Integration
 mcp>=1.20.0
+langchain-mcp-adapters
 
 # LLM APIs
 openai

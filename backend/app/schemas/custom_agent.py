@@ -110,6 +110,8 @@ class CustomAgentBase(BaseModel):
     @field_validator('schedule')
     @classmethod
     def validate_schedule(cls, v, info):
+        if v == "":
+            return None
         if v is not None:
             if not validate_cron_expression(v):
                 raise ValueError('Invalid cron expression format')
@@ -160,6 +162,8 @@ class CustomAgentUpdate(BaseModel):
     @field_validator('schedule')
     @classmethod
     def validate_schedule(cls, v):
+        if v == "":
+            return None
         if v is not None and not validate_cron_expression(v):
             raise ValueError('Invalid cron expression format')
         return v
@@ -169,23 +173,24 @@ class CustomAgentResponse(CustomAgentBase):
     id: UUID
     user_id: UUID
     team_id: Optional[UUID]
-    
+
     is_template: bool
     template_id: Optional[UUID]
-    
+
     # Scheduling
     last_scheduled_run: Optional[datetime]
     next_scheduled_run: Optional[datetime]
-    
+    beat_registered: bool = False
+
     # Stats (calculated from analytics)
     run_count: int = 0
     star_count: int
     install_count: int
     last_used_at: Optional[datetime]
-    
+
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 

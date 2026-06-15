@@ -5,6 +5,7 @@ from app.models.agent_run import AgentRun, AgentRunLog
 from app.models.chat import ChatMessage
 from app.models.team import Team, TeamMember
 from app.models.custom_agent import CustomAgent, AgentKnowledgeFile, AgentConversation, AgentMessage
+from app.models.note import Note
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "AgentKnowledgeFile",
     "AgentConversation",
     "AgentMessage",
+    "Note",
 ]

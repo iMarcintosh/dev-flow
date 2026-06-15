@@ -1,5 +1,5 @@
 """
-Scheduler service for managing custom agent schedules with Celery Beat.
+Scheduler service for managing custom agent schedules with Celery Beat (RedBeat).
 """
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -69,81 +69,87 @@ def calculate_next_run(cron_expression: str, base_time: Optional[datetime] = Non
 
 def register_scheduled_agent(agent_id: str, agent_name: str, cron_expression: str):
     """
-    Register an agent with Celery Beat for scheduled execution.
-    
+    Register an agent with Celery Beat via RedBeat (stored in Redis).
+
     Args:
         agent_id: UUID string of the agent
         agent_name: Human-readable name
         cron_expression: Cron format schedule
     """
     try:
+        from redbeat import RedBeatSchedulerEntry
+
         cron_kwargs = parse_cron_schedule(cron_expression)
         schedule = crontab(**cron_kwargs)
-        
-        # Register with Celery Beat
-        celery_app.conf.beat_schedule[f"custom-agent-{agent_id}"] = {
-            "task": "run_custom_agent_scheduled",
-            "schedule": schedule,
-            "args": (agent_id,),
-        }
-        
-        print(f"✓ Registered scheduled agent: {agent_name} ({agent_id}) - {cron_expression}")
-        
+
+        entry = RedBeatSchedulerEntry(
+            f"custom-agent-{agent_id}",
+            "run_custom_agent_scheduled",
+            schedule,
+            args=(agent_id,),
+            app=celery_app,
+        )
+        entry.save()
+
+        print(f"✓ Registered scheduled agent (RedBeat): {agent_name} ({agent_id}) - {cron_expression}")
+
     except Exception as e:
         print(f"✗ Failed to register agent {agent_name}: {e}")
 
 
 def unregister_scheduled_agent(agent_id: str):
     """
-    Remove an agent from Celery Beat schedule.
-    
+    Remove an agent from Celery Beat schedule via RedBeat.
+
     Args:
         agent_id: UUID string of the agent
     """
-    task_name = f"custom-agent-{agent_id}"
-    if task_name in celery_app.conf.beat_schedule:
-        del celery_app.conf.beat_schedule[task_name]
-        print(f"✓ Unregistered scheduled agent: {agent_id}")
-
-
-async def load_scheduled_agents(db: AsyncSession):
-    """
-    Load all scheduled custom agents and register them with Celery Beat.
-    
-    This is called during worker/beat startup.
-    
-    Args:
-        db: Database session
-    """
     try:
-        # Query all scheduled agents
-        stmt = select(CustomAgent).where(
-            CustomAgent.trigger == "scheduled",
-            CustomAgent.schedule_enabled == True,
-            CustomAgent.schedule.isnot(None)
-        )
-        
-        result = await db.execute(stmt)
-        agents = result.scalars().all()
-        
-        # Register each agent
-        for agent in agents:
-            # Calculate next run if not set
-            if not agent.next_scheduled_run and agent.schedule:
-                agent.next_scheduled_run = calculate_next_run(agent.schedule)
-            
-            # Register with Celery Beat
+        from redbeat import RedBeatSchedulerEntry
+
+        key = f"devflow:beat:custom-agent-{agent_id}"
+        entry = RedBeatSchedulerEntry.from_key(key, app=celery_app)
+        entry.delete()
+        print(f"✓ Unregistered scheduled agent (RedBeat): {agent_id}")
+    except Exception:
+        pass
+
+
+async def load_scheduled_agents(db: AsyncSession) -> int:
+    """
+    Sync custom agents from DB → RedBeat on startup.
+    Idempotent: only registers agents missing from Redis.
+    """
+    import redis as sync_redis
+    from app.config import settings
+
+    r = sync_redis.from_url(settings.redis_url, decode_responses=True)
+
+    stmt = select(CustomAgent).where(
+        CustomAgent.trigger == "scheduled",
+        CustomAgent.schedule_enabled == True,
+        CustomAgent.schedule.isnot(None),
+    )
+    result = await db.execute(stmt)
+    agents = result.scalars().all()
+
+    recovered = 0
+    for agent in agents:
+        key = f"devflow:beat:custom-agent-{agent.id}"
+        if not r.exists(key):
             register_scheduled_agent(str(agent.id), agent.name, agent.schedule)
-        
+            recovered += 1
+
+        # Always recalculate next_scheduled_run to fix stale past timestamps
+        next_run = calculate_next_run(agent.schedule)
+        if agent.next_scheduled_run != next_run:
+            agent.next_scheduled_run = next_run
+
+    if agents:
         await db.commit()
-        
-        print(f"✓ Loaded {len(agents)} scheduled custom agents")
-        return len(agents)
-        
-    except Exception as e:
-        print(f"✗ Failed to load scheduled agents: {e}")
-        await db.rollback()
-        return 0
+
+    print(f"✓ RedBeat recovery: {recovered}/{len(agents)} custom agents re-registered")
+    return recovered
 
 
 async def update_agent_schedule(

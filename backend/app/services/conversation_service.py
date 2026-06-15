@@ -133,16 +133,18 @@ async def get_conversation_history(
     if not conversation:
         raise ValueError("Conversation not found or access denied")
     
-    # Get messages
+    # Get messages — fetch newest first so the limit keeps the most recent ones,
+    # then reverse to return them in chronological order.
     query = (
         select(AgentMessage)
         .where(AgentMessage.conversation_id == conversation_id)
-        .order_by(AgentMessage.created_at)
+        .order_by(AgentMessage.created_at.desc())
         .limit(limit)
     )
-    
+
     result = await db.execute(query)
-    return list(result.scalars().all())
+    messages = list(result.scalars().all())
+    return list(reversed(messages))
 
 
 async def list_conversations(
@@ -234,6 +236,12 @@ async def delete_conversation(
     
     await db.delete(conversation)
     await db.commit()
+
+    # Delete LangGraph checkpoint history for this conversation (thread_id = conversation_id)
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from app.agent.custom_agent_runner import _get_postgres_conn_string
+    async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+        await checkpointer.adelete_thread(str(conversation_id))
 
 
 async def update_conversation_title(

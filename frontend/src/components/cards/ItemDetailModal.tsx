@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Item, ItemType, ItemPriority } from '@/types'
 import { useUpdateItem, useDeleteItem } from '@/services/queries'
 import { X, Trash2, Save } from 'lucide-react'
@@ -17,6 +19,8 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
   const [priority, setPriority] = useState(item.priority)
   const [type, setType] = useState(item.type)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [descriptionTab, setDescriptionTab] = useState<'edit' | 'preview'>('edit')
+  const [criteriaTab, setCriteriaTab] = useState<'edit' | 'preview'>('edit')
 
   const updateItem = useUpdateItem()
   const deleteItem = useDeleteItem()
@@ -48,9 +52,22 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
     })
   }
 
+  const FieldTabs = ({ active, onChange }: { active: 'edit' | 'preview', onChange: (t: 'edit' | 'preview') => void }) => (
+    <div className="flex gap-1 text-xs">
+      {(['edit', 'preview'] as const).map(tab => (
+        <button key={tab} onClick={() => onChange(tab)}
+          className={`px-2 py-0.5 rounded capitalize transition-colors ${
+            active === tab ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
+          }`}>
+          {tab}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-card border border-border rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-card border border-border rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-bold text-foreground">Item Details</h2>
@@ -105,28 +122,48 @@ export default function ItemDetailModal({ item, onClose }: ItemDetailModalProps)
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground resize-none"
-              placeholder="Add a description..."
-            />
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-foreground">Description</label>
+              <FieldTabs active={descriptionTab} onChange={setDescriptionTab} />
+            </div>
+            {descriptionTab === 'edit' ? (
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={8}
+                placeholder="Add a description... (Markdown supported)"
+                className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground resize-y font-mono text-sm"
+              />
+            ) : (
+              <div className="w-full min-h-[12rem] px-4 py-3 bg-background border border-border rounded-lg prose prose-invert prose-sm max-w-none">
+                {description
+                  ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown>
+                  : <span className="text-muted-foreground italic">No description</span>}
+              </div>
+            )}
           </div>
 
           {/* Acceptance Criteria */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Acceptance Criteria
-            </label>
-            <textarea
-              value={acceptanceCriteria}
-              onChange={(e) => setAcceptanceCriteria(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground resize-none"
-              placeholder="Define acceptance criteria..."
-            />
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-foreground">Acceptance Criteria</label>
+              <FieldTabs active={criteriaTab} onChange={setCriteriaTab} />
+            </div>
+            {criteriaTab === 'edit' ? (
+              <textarea
+                value={acceptanceCriteria}
+                onChange={(e) => setAcceptanceCriteria(e.target.value)}
+                rows={8}
+                placeholder="Define acceptance criteria... (Markdown supported)"
+                className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground resize-y font-mono text-sm"
+              />
+            ) : (
+              <div className="w-full min-h-[12rem] px-4 py-3 bg-background border border-border rounded-lg prose prose-invert prose-sm max-w-none">
+                {acceptanceCriteria
+                  ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{acceptanceCriteria}</ReactMarkdown>
+                  : <span className="text-muted-foreground italic">No acceptance criteria</span>}
+              </div>
+            )}
           </div>
 
           {/* Metadata */}

@@ -3,50 +3,103 @@ Knowledge Base Service for Custom Agents
 
 Handles file uploads, text extraction, embeddings, and vector search.
 """
-import os
-import tempfile
 import hashlib
-from typing import List, Dict, Optional
-from pathlib import Path
 import logging
+from typing import List, Dict, Optional
 
 import chromadb
 from chromadb.config import Settings
-from openai import OpenAI
+
+from app.services.embedding_service import embedding_service as _embedding_service
 
 logger = logging.getLogger(__name__)
 
 
 class KnowledgeBaseService:
     """Service for managing agent knowledge bases with RAG"""
-    
+
     def __init__(self):
-        # Initialize ChromaDB
-        self.chroma_client = chromadb.PersistentClient(
-            path="./data/chromadb",
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
+        # Defer ChromaDB initialization to first use so forked Celery workers
+        # each open their own connection (avoids SQLite WAL lock contention).
+        self._chroma_client = None
+
+    @property
+    def chroma_client(self):
+        if self._chroma_client is None:
+            self._chroma_client = chromadb.PersistentClient(
+                path="./data/chromadb",
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
             )
-        )
-        
-        # Initialize OpenAI for embeddings
-        self.openai_client = None
-        try:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if api_key:
-                self.openai_client = OpenAI(api_key=api_key)
-                logger.info("OpenAI client initialized for embeddings")
-        except Exception as e:
-            logger.warning(f"Failed to initialize OpenAI client: {e}")
-    
+        return self._chroma_client
+
     def get_or_create_collection(self, agent_id: str):
         """Get or create ChromaDB collection for an agent"""
         collection_name = f"agent_{agent_id.replace('-', '_')}"
         return self.chroma_client.get_or_create_collection(
             name=collection_name,
-            metadata={"agent_id": agent_id}
+            metadata={"agent_id": agent_id, "hnsw:space": "cosine"}
         )
+
+    def get_or_create_notebook_collection(self, user_id: str):
+        """Get or create ChromaDB collection for a user's notebook (no agent_ prefix)"""
+        collection_name = f"notebook_{user_id.replace('-', '_')}"
+        return self.chroma_client.get_or_create_collection(
+            name=collection_name,
+            metadata={"user_id": user_id, "hnsw:space": "cosine"}
+        )
+
+    def search_notebook(self, user_id: str, query: str, n_results: int = 5) -> List[Dict[str, any]]:
+        """Search a user's notebook collection"""
+        try:
+            collection = self.get_or_create_notebook_collection(user_id)
+
+            if collection.count() == 0:
+                return []
+
+            query_embedding = self.generate_embedding(query)
+            if not query_embedding:
+                return []
+
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results
+            )
+
+            formatted_results = []
+            if results['documents']:
+                for i, doc in enumerate(results['documents'][0]):
+                    formatted_results.append({
+                        "text": doc,
+                        "metadata": results['metadatas'][0][i] if results['metadatas'] else {},
+                        "distance": results['distances'][0][i] if results['distances'] else None
+                    })
+            return formatted_results
+
+        except Exception as e:
+            logger.error(f"Error searching notebook for user {user_id}: {e}")
+            return []
+
+    def delete_notebook_file(self, user_id: str, file_id: str) -> bool:
+        """Delete a note's chunks from the notebook collection"""
+        try:
+            collection = self.get_or_create_notebook_collection(user_id)
+            all_data = collection.get()
+            ids_to_delete = []
+            if all_data['ids'] and all_data['metadatas']:
+                for i, metadata in enumerate(all_data['metadatas']):
+                    if metadata.get('file_id') == file_id:
+                        ids_to_delete.append(all_data['ids'][i])
+            if ids_to_delete:
+                collection.delete(ids=ids_to_delete)
+                logger.info(f"Deleted {len(ids_to_delete)} chunks for file {file_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting notebook file {file_id}: {e}")
+            return False
     
     def extract_text_from_file(self, file_path: str, file_type: str) -> str:
         """
@@ -114,43 +167,11 @@ class KnowledgeBaseService:
         return [c for c in chunks if c]  # Filter empty chunks
     
     def generate_embedding(self, text: str) -> Optional[List[float]]:
-        """
-        Generate embedding for text using OpenAI or local model fallback
-        
-        Args:
-            text: Text to embed
-            
-        Returns:
-            Embedding vector or None if failed
-        """
-        # Try OpenAI first if available
-        if self.openai_client:
-            try:
-                response = self.openai_client.embeddings.create(
-                    model="text-embedding-3-small",
-                    input=text
-                )
-                return response.data[0].embedding
-            except Exception as e:
-                logger.error(f"Error generating OpenAI embedding: {e}")
-        
-        # Fallback to local sentence-transformers model
+        """Generate embedding using the shared EmbeddingService."""
         try:
-            from sentence_transformers import SentenceTransformer
-            
-            # Lazy load model (cache it after first use)
-            if not hasattr(self, '_local_model'):
-                logger.info("Loading local embedding model (all-MiniLM-L6-v2)...")
-                self._local_model = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            embedding = self._local_model.encode(text, convert_to_numpy=True)
-            return embedding.tolist()
-            
-        except ImportError:
-            logger.error("sentence-transformers not installed. Cannot generate embeddings.")
-            return None
+            return _embedding_service.embed_text(text)
         except Exception as e:
-            logger.error(f"Error generating local embedding: {e}")
+            logger.error(f"Error generating embedding: {e}")
             return None
     
     async def add_file_to_knowledge_base(

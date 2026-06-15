@@ -22,25 +22,25 @@ logger = logging.getLogger(__name__)
 class ChatAgent(BaseDevFlowAgent):
     """
     Chat agent with board context and memory.
-    
+
     Capabilities:
     - Answers questions about board items
     - Provides project statistics
     - Can reference specific items
-    - Maintains conversation history
+    - Maintains conversation history via LangGraph checkpointer
     """
-    
+
     name = "chat_agent"
     description = "Board chatbot with project context and memory"
     trigger = AgentTrigger.MANUAL
-    
+
     def __init__(self):
         super().__init__()
-    
+
     async def _get_llm(self, user_id: str):
         """Get LLM based on user's preferred model for chat agent."""
         from app.agent.model_resolver import get_user_llm
-        
+
         try:
             llm = await get_user_llm(user_id, agent_type="chat_agent")
             return llm
@@ -56,48 +56,42 @@ class ChatAgent(BaseDevFlowAgent):
                     max_tokens=2048
                 )
             return None
-    
+
     async def run(self, input: AgentInput, run_id: str) -> AgentResult:
         """Process chat message and generate response."""
         try:
             user_message = input.data.get("message", "")
             project_id = input.project_id
-            
+
             await self.log(run_id, f"Processing message: {user_message[:100]}...")
-            
+
             async with async_session_maker() as db:
-                # 1. Get conversation history (last 20 messages)
-                await self.log(run_id, "Loading conversation history...")
-                history = await self._get_conversation_history(
-                    db, project_id, limit=20
-                )
-                
-                # 2. Get project stats
+                # 1. Get project stats
                 await self.log(run_id, "Gathering project statistics...")
                 stats = await vector_store.get_project_stats(db, project_id)
-                
-                # 3. Semantic search for relevant items
+
+                # 2. Semantic search for relevant items
                 await self.log(run_id, "Searching for relevant items...")
                 relevant_items = await vector_store.similarity_search(
-                    db, user_message, project_id, top_k=5
+                    db, user_message, project_id, top_k=15
                 )
-                
-                # 4. Build context
-                context = self._build_context(stats, relevant_items, history)
-                
-                # 5. Generate response (simple rule-based for now, ready for LLM)
+
+                # 3. Build context (stats + relevant items, no history — checkpointer handles it)
+                context = self._build_context(stats, relevant_items)
+
+                # 4. Generate response via LangGraph checkpointer
                 await self.log(run_id, "Generating response...")
                 response = await self._generate_response(
-                    user_message, context, relevant_items, input.user_id
+                    user_message, context, relevant_items, input.user_id, project_id
                 )
-                
-                # 6. Save messages to DB
+
+                # 5. Save messages to DB for frontend display
                 await self._save_messages(
                     db, project_id, input.user_id, user_message, response
                 )
-                
+
                 await self.log(run_id, "Response generated successfully")
-                
+
                 return AgentResult(
                     success=True,
                     output={
@@ -114,7 +108,7 @@ class ChatAgent(BaseDevFlowAgent):
                     },
                     message="Chat response generated"
                 )
-                
+
         except Exception as e:
             await self.log(run_id, f"Error: {str(e)}", level="error")
             logger.exception("Chat agent failed")
@@ -123,71 +117,52 @@ class ChatAgent(BaseDevFlowAgent):
                 output={},
                 message=f"Error: {str(e)}"
             )
-    
-    async def _get_conversation_history(
-        self, db, project_id: str, limit: int = 20
-    ) -> List[ChatMessage]:
-        """Fetch recent conversation history."""
-        from sqlalchemy import select
-        
-        stmt = (
-            select(ChatMessage)
-            .where(ChatMessage.project_id == project_id)
-            .order_by(ChatMessage.created_at.desc())
-            .limit(limit)
-        )
-        
-        result = await db.execute(stmt)
-        messages = result.scalars().all()
-        
-        return list(reversed(messages))
-    
-    def _build_context(
-        self, stats: Dict, items: List, history: List[ChatMessage]
-    ) -> str:
+
+    def _build_context(self, stats: Dict, items: List) -> str:
         """Build contextual information for the agent."""
         parts = ["# Project Context\n"]
-        
+
         # Statistics
         parts.append(f"Total Items: {stats['total_items']}")
         parts.append(f"By Status: {json.dumps(stats['by_status'])}")
         parts.append(f"By Type: {json.dumps(stats['by_type'])}")
         parts.append(f"By Priority: {json.dumps(stats['by_priority'])}")
         parts.append("")
-        
+
         # Relevant items
         if items:
             parts.append("# Relevant Items:\n")
-            for idx, item in enumerate(items[:5], 1):
-                parts.append(f"{idx}. [{item.type.value.upper()}] {item.title}")
+            for idx, item in enumerate(items[:15], 1):
+                parts.append(f"{idx}. [{item.type.value.upper()}] {item.title} (ID: {item.id})")
                 parts.append(f"   Status: {item.status.value}, Priority: {item.priority.value}")
+                if item.created_by:
+                    parts.append(f"   Created by: {item.created_by}, Created: {item.created_at.strftime('%Y-%m-%d')}, Updated: {item.updated_at.strftime('%Y-%m-%d')}")
                 if item.description:
-                    parts.append(f"   {item.description[:200]}...")
+                    parts.append(f"   Description: {item.description[:300]}")
+                if item.acceptance_criteria:
+                    parts.append(f"   Acceptance Criteria: {item.acceptance_criteria[:500]}")
                 parts.append("")
-        
-        # Recent conversation
-        if history:
-            parts.append("# Recent Conversation:\n")
-            for msg in history[-5:]:
-                role = "User" if msg.role == "user" else "Assistant"
-                parts.append(f"{role}: {msg.content[:100]}...")
-        
+
         return "\n".join(parts)
-    
+
     async def _generate_response(
-        self, message: str, context: str, items: List, user_id: str
+        self, message: str, context: str, items: List, user_id: str, project_id: str
     ) -> str:
         """
-        Generate response based on message and context.
-        Uses LLM if available, otherwise falls back to rule-based logic.
+        Generate response using LangGraph checkpointer for conversation memory.
+        Falls back to rule-based logic if no LLM is available.
         """
         llm = await self._get_llm(user_id)
-        
+
         if llm:
-            # Use LLM for intelligent responses
             try:
-                from langchain_core.messages import SystemMessage, HumanMessage
-                
+                from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+                from langgraph_prebuilt import create_react_agent
+                from langchain_core.messages import HumanMessage
+                from app.agent.custom_agent_runner import _get_postgres_conn_string
+
+                thread_id = f"board-{project_id}-{user_id}"
+
                 system_prompt = f"""You are a helpful AI assistant for DevFlow, a project management tool.
 You have access to the user's project board with all their tasks, bugs, stories, and epics.
 
@@ -212,21 +187,27 @@ Guidelines:
 
 Remember: Accuracy is more important than being helpful. It's better to say "I don't have that information" than to make something up."""
 
-                messages = [
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content=message)
-                ]
-                
-                response = llm.invoke(messages)
-                return response.content
-                
+                async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+                    await checkpointer.setup()
+                    agent_executor = create_react_agent(
+                        llm,
+                        tools=[],
+                        prompt=system_prompt,
+                        checkpointer=checkpointer,
+                    )
+                    result = await agent_executor.ainvoke(
+                        {"messages": [HumanMessage(content=message)]},
+                        config={"configurable": {"thread_id": thread_id}},
+                    )
+                    return result["messages"][-1].content
+
             except Exception as e:
                 logger.error(f"LLM call failed: {e}, falling back to rules")
                 # Fall through to rule-based logic
-        
-        # Rule-based fallback (original logic)
+
+        # Rule-based fallback
         message_lower = message.lower()
-        
+
         if any(word in message_lower for word in ["how many", "count", "total"]):
             if "bug" in message_lower:
                 return self._count_response(context, "bug")
@@ -236,28 +217,27 @@ Remember: Accuracy is more important than being helpful. It's better to say "I d
                 return self._count_response(context, "story")
             else:
                 return self._general_count_response(context)
-        
+
         elif any(word in message_lower for word in ["status", "progress"]):
             return self._status_response(context)
-        
+
         elif any(word in message_lower for word in ["priority", "urgent", "critical"]):
             return self._priority_response(context, items)
-        
+
         elif items:
             item_refs = ", ".join([
                 f"'{item.title}' ({item.type.value})"
                 for item in items[:3]
             ])
             return f"I found these relevant items: {item_refs}. What would you like to know about them?"
-        
+
         else:
             return "I'm here to help with your board! Ask me about tasks, bugs, stories, or project status."
-    
+
     def _count_response(self, context: str, item_type: str) -> str:
         """Extract count for specific item type."""
         import json
-        
-        # Parse context for type counts
+
         for line in context.split('\n'):
             if "By Type:" in line:
                 try:
@@ -266,22 +246,22 @@ Remember: Accuracy is more important than being helpful. It's better to say "I d
                     return f"You have {count} {item_type}(s) in this project."
                 except:
                     pass
-        
+
         return f"I couldn't find the count for {item_type}s."
-    
+
     def _general_count_response(self, context: str) -> str:
         """General item count response."""
         for line in context.split('\n'):
             if "Total Items:" in line:
                 count = line.split(": ")[1]
                 return f"This project has {count} total items."
-        
+
         return "I couldn't retrieve the item count."
-    
+
     def _status_response(self, context: str) -> str:
         """Project status overview."""
         import json
-        
+
         for line in context.split('\n'):
             if "By Status:" in line:
                 try:
@@ -290,7 +270,7 @@ Remember: Accuracy is more important than being helpful. It's better to say "I d
                     in_progress = status_data.get('in_progress', 0)
                     review = status_data.get('review', 0)
                     done = status_data.get('done', 0)
-                    
+
                     return (
                         f"Project status: {backlog} in backlog, "
                         f"{in_progress} in progress, {review} in review, "
@@ -298,46 +278,45 @@ Remember: Accuracy is more important than being helpful. It's better to say "I d
                     )
                 except:
                     pass
-        
+
         return "I couldn't retrieve the project status."
-    
+
     def _priority_response(self, context: str, items: List) -> str:
         """Priority-related response."""
         import json
-        
+
         for line in context.split('\n'):
             if "By Priority:" in line:
                 try:
                     priority_data = json.loads(line.split("By Priority: ")[1])
                     critical = priority_data.get('critical', 0)
                     high = priority_data.get('high', 0)
-                    
+
                     if critical > 0 or high > 0:
                         high_priority_items = [
-                            item for item in items 
+                            item for item in items
                             if item.priority.value in ['critical', 'high']
                         ]
-                        
+
                         msg = f"You have {critical} critical and {high} high priority items."
-                        
+
                         if high_priority_items:
                             top_item = high_priority_items[0]
                             msg += f" Top priority: '{top_item.title}' ({top_item.priority.value})."
-                        
+
                         return msg
                     else:
                         return "No critical or high priority items at the moment."
                 except:
                     pass
-        
+
         return "I couldn't retrieve priority information."
-    
+
     async def _save_messages(
-        self, db, project_id: str, user_id: str, 
+        self, db, project_id: str, user_id: str,
         user_message: str, assistant_message: str
     ):
-        """Save user and assistant messages to database."""
-        # User message
+        """Save user and assistant messages to database for frontend display."""
         user_msg = ChatMessage(
             user_id=user_id,
             project_id=project_id,
@@ -345,16 +324,15 @@ Remember: Accuracy is more important than being helpful. It's better to say "I d
             content=user_message
         )
         db.add(user_msg)
-        
-        # Assistant message
+
         assistant_msg = ChatMessage(
-            user_id=user_id,  # Same user for context
+            user_id=user_id,
             project_id=project_id,
             role="assistant",
             content=assistant_message
         )
         db.add(assistant_msg)
-        
+
         await db.commit()
 
 
