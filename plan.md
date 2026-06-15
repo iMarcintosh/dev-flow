@@ -9,12 +9,12 @@
 | 5 | Per-User API Keys, Analytics | ✅ | — |
 | 6 | Scheduled Prompt, Open-Meteo | ✅ | 2026-02-19 |
 | 7 | Agent Chat Bug Fixes | ✅ | 2026-02-23 |
+| 8 | Analytics Dashboard UI | ✅ | 2026-06-15 |
 
 ## Nächste Schritte (offen)
 
 - [ ] Agent Chat: Pagination / Load More für sehr lange Conversations
 - [ ] Agent Chat: Message editing / resend
-- [ ] Analytics Dashboard UI (Frontend)
 - [ ] Agent Marketplace
 - [ ] Workflow Automation
 
