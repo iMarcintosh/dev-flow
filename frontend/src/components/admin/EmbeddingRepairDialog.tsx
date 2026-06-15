@@ -29,7 +29,7 @@ export function EmbeddingRepairDialog() {
   const { data: health, isLoading: healthLoading, refetch } = useQuery<EmbeddingHealth>({
     queryKey: ['embedding-health'],
     queryFn: async () => {
-      const response = await api.get('/admin/embedding-health')
+      const response = await api.get('/api/admin/embedding-health')
       return response.data
     },
     enabled: isOpen,
@@ -37,7 +37,7 @@ export function EmbeddingRepairDialog() {
 
   const repairMutation = useMutation<RepairResult, Error>({
     mutationFn: async () => {
-      const response = await api.post('/admin/repair-embeddings')
+      const response = await api.post('/api/admin/repair-embeddings')
       return response.data
     },
     onSuccess: () => {
