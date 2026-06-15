@@ -90,6 +90,32 @@ export async function getAgentToolUsage(agentId: string, days: number = 30): Pro
 }
 
 /**
+ * Get global summary across all user's agents
+ */
+export async function getGlobalSummary(days: number = 30): Promise<AgentSummary | null> {
+  try {
+    const { data } = await api.get('/api/analytics/summary', { params: { days } })
+    return data
+  } catch (error: any) {
+    if (error.response?.status === 404) return null
+    throw error
+  }
+}
+
+/**
+ * Get global tool usage across all user's agents
+ */
+export async function getGlobalToolUsage(days: number = 30): Promise<ToolUsageStat[]> {
+  try {
+    const { data } = await api.get('/api/analytics/tools', { params: { days } })
+    return data
+  } catch (error: any) {
+    if (error.response?.status === 404) return []
+    throw error
+  }
+}
+
+/**
  * Get total lifetime runs for an agent (for display on cards)
  */
 export async function getAgentTotalRuns(agentId: string): Promise<number> {

@@ -11,6 +11,7 @@ import AgentChatPage from './components/agent-chat/AgentChatPage'
 import SettingsPage from './components/settings/SettingsPage'
 import TeamManagementPage from './components/teams/TeamManagementPage'
 import NotebookPage from './components/notebook/NotebookPage'
+import AnalyticsDashboard from './components/analytics/AnalyticsDashboard'
 import { ToastProvider } from './hooks/useToast'
 
 const queryClient = new QueryClient()
@@ -89,6 +90,12 @@ const notebookRoute = createRoute({
   }),
 })
 
+const analyticsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/analytics',
+  component: AnalyticsDashboard,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -99,6 +106,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   teamsRoute,
   notebookRoute,
+  analyticsRoute,
 ])
 
 const router = createRouter({ routeTree })
