@@ -11,7 +11,7 @@ interface AgentActionModalProps {
   onClose: () => void
 }
 
-export function AgentActionModal({ item, agentId, onClose }: AgentActionModalProps) {
+export function AgentActionModal({ item, onClose }: AgentActionModalProps) {
   const [message, setMessage] = useState('')
   const [response, setResponse] = useState<string | null>(null)
   const queryClient = useQueryClient()

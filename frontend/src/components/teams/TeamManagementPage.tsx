@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useTeams, useCreateTeam, useDeleteTeam } from '@/services/queries'
+import { useTeams, useDeleteTeam } from '@/services/queries'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Plus, Users, Loader2, Trash2 } from 'lucide-react'
 import CreateTeamModal from './CreateTeamModal'

@@ -179,12 +179,12 @@ function MessageBubble({ message }: MessageBubbleProps) {
                       </td>
                     )
                   },
-                  code({ node, inline, className, children, ...props }) {
+                  code({ node, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || '')
                     const language = match ? match[1] : ''
                     const codeString = String(children).replace(/\n$/, '')
 
-                    return !inline && language ? (
+                    return language ? (
                       <div className="my-4 rounded-lg overflow-hidden border border-border">
                         <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
                           <span className="text-xs font-medium text-muted-foreground uppercase">
@@ -207,7 +207,6 @@ function MessageBubble({ message }: MessageBubbleProps) {
                             color: isDarkMode ? '#6e7681' : '#57606a',
                             userSelect: 'none',
                           }}
-                          {...props}
                         >
                           {codeString}
                         </SyntaxHighlighter>

@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import { Bot } from 'lucide-react'
 import { customAgentService } from '@/services/custom-agents'
 
 interface AgentBadgeProps {

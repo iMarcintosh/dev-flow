@@ -192,7 +192,7 @@ function ApiKeyInput({ provider, status, maskedKey }: ApiKeyInputProps) {
         
         <button
           onClick={handleSave}
-          disabled={!apiKey.trim() || updateMutation.isPending || (testResult && !testResult.valid)}
+          disabled={!apiKey.trim() || updateMutation.isPending || (testResult !== null && !testResult.valid)}
           className="px-3 py-1.5 text-sm text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
         >
           {updateMutation.isPending ? (

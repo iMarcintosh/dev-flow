@@ -205,7 +205,7 @@ export default function AgentChatPage() {
           <div className="text-center">
             <p className="text-muted-foreground">No agent selected</p>
             <button
-              onClick={() => navigate({ to: '/agents' })}
+          onClick={() => navigate({ to: '/agents', search: { project_id: projectIdFromUrl } })}
               className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
             >
               Go to Agent Hub
@@ -233,7 +233,7 @@ export default function AgentChatPage() {
           <div className="text-center">
             <p className="text-muted-foreground">Agent not found</p>
             <button
-              onClick={() => navigate({ to: '/agents' })}
+              onClick={() => navigate({ to: '/agents', search: { project_id: projectIdFromUrl } })}
               className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
             >
               Go to Agent Hub
@@ -251,7 +251,7 @@ export default function AgentChatPage() {
           <div className="px-6 py-4">
             <div className="flex items-center gap-4">
               <button
-                onClick={() => navigate({ to: '/agents' })}
+                onClick={() => navigate({ to: '/agents', search: { project_id: projectIdFromUrl } })}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
