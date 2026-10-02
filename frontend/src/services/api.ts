@@ -44,8 +44,16 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+    const requestPath = originalRequest?.url
+      ? new URL(originalRequest.url, API_URL).pathname
+      : undefined
+    const isSessionRequest = requestPath === '/api/auth/login'
+      || requestPath === '/api/auth/register'
+      || requestPath === '/api/auth/refresh'
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Invalid credentials are not an expired session. Let the form show the
+    // original error instead of attempting a refresh and reloading the page.
+    if (error.response?.status === 401 && originalRequest && !isSessionRequest && !originalRequest._retry) {
       if (isRefreshing) {
         // Another refresh is already running — queue this request
         return new Promise((resolve, reject) => {
