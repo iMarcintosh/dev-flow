@@ -1,8 +1,10 @@
 from app.agent.base_agent import BaseDevFlowAgent, AgentInput, AgentResult, AgentTrigger
 from app.agent.registry import registry
-from app.config import settings
 from typing import Dict, Any, List
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TaskCreatorAgent(BaseDevFlowAgent):
@@ -39,20 +41,24 @@ class TaskCreatorAgent(BaseDevFlowAgent):
             return llm
         except Exception as e:
             logger.error(f"Failed to get user LLM: {e}, using fallback")
-            # Fallback to hardcoded Haiku
-            if settings.anthropic_api_key:
+            from app.services import api_key_service
+            from app.database import async_session_maker
+            async with async_session_maker() as db:
+                anthropic_key = await api_key_service.get_api_key(db, user_id, "anthropic")
+                openai_key = await api_key_service.get_api_key(db, user_id, "openai")
+            if anthropic_key:
                 from langchain_anthropic import ChatAnthropic
                 return ChatAnthropic(
                     model="claude-3-haiku-20240307",
-                    anthropic_api_key=settings.anthropic_api_key,
+                    anthropic_api_key=anthropic_key,
                     temperature=0.7,
                     max_tokens=4096
                 )
-            elif settings.openai_api_key:
+            elif openai_key:
                 from langchain_openai import ChatOpenAI
                 return ChatOpenAI(
                     model="gpt-4",
-                    openai_api_key=settings.openai_api_key,
+                    openai_api_key=openai_key,
                     temperature=0.7
                 )
             return None

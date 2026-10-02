@@ -88,12 +88,15 @@ async def run_custom_agent(
     # Get tools list for execution (if enabled)
     if agent.enabled_tools:
         from app.agent.tools.tool_registry import get_tools_list
+        from app.services import api_key_service
+        embedding_api_key = await api_key_service.get_api_key(db, user_id, "openai") or ""
         tools_list = get_tools_list(
             tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
+            embedding_api_key=embedding_api_key,
         )
         # Async-load MCP tools for execution
         if "mcp" in agent.enabled_tools:
@@ -256,12 +259,15 @@ async def run_custom_agent_streaming(
     # Bind tools if enabled
     if agent.enabled_tools:
         from app.agent.tools.tool_registry import get_tools_list
+        from app.services import api_key_service
+        embedding_api_key = await api_key_service.get_api_key(db, user_id, "openai") or ""
         stream_tools = get_tools_list(
             tool_names=[t for t in agent.enabled_tools if t != "mcp"],
             db=db,
             user_id=str(user_id),
             project_id=str(project_id) if project_id else None,
             agent_id=str(agent_id),
+            embedding_api_key=embedding_api_key,
         )
         if "mcp" in agent.enabled_tools:
             from app.agent.tools.mcp_integration import get_mcp_tools
@@ -360,12 +366,15 @@ async def run_custom_agent_sse(
         tools_list: List[BaseTool] = []
         if agent.enabled_tools:
             from app.agent.tools.tool_registry import get_tools_list
+            from app.services import api_key_service
+            embedding_api_key = await api_key_service.get_api_key(db, user_id, "openai") or ""
             tools_list = get_tools_list(
                 tool_names=[t for t in agent.enabled_tools if t != "mcp"],
                 db=db,
                 user_id=str(user_id),
                 project_id=str(resolved_project_id) if resolved_project_id else None,
                 agent_id=str(agent_id),
+                embedding_api_key=embedding_api_key,
             )
             # Async-load MCP tools if requested
             if "mcp" in agent.enabled_tools:

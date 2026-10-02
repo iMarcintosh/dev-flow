@@ -92,7 +92,8 @@ async def upload_file(
             agent_id=agent_id,
             file_path=tmp_path,
             filename=file.filename,
-            file_type=file.content_type or file_ext
+            file_type=file.content_type or file_ext,
+            api_key=current_user.openai_api_key
         )
         
         return FileUploadResponse(**result)
@@ -177,7 +178,8 @@ async def search_knowledge_base(
     results = knowledge_base_service.search_knowledge_base(
         agent_id=agent_id,
         query=request.query,
-        n_results=request.n_results
+        n_results=request.n_results,
+        api_key=current_user.openai_api_key
     )
     
     return [SearchResult(**r) for r in results]

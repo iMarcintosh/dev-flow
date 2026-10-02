@@ -66,18 +66,20 @@ async def create_llm(model_name: str, user_id: str, temperature: float = 0.7, ma
             model=model_name,
             anthropic_api_key=api_key,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            timeout=30
         )
-    
+
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name,
             openai_api_key=api_key,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            timeout=30
         )
-    
+
     elif provider == "openrouter":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
@@ -86,6 +88,7 @@ async def create_llm(model_name: str, user_id: str, temperature: float = 0.7, ma
             openai_api_base="https://openrouter.ai/api/v1",
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout=30,
             default_headers={
                 "HTTP-Referer": "https://devflow.app",
                 "X-Title": "DevFlow"

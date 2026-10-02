@@ -3,6 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models.note import Note
+from app.models.user import User
 from app.database import SessionLocal
 from app.services.knowledge_base import knowledge_base_service
 from app.services.embedding_service import embedding_service
@@ -24,6 +25,9 @@ def index_note_task(note_id: str):
         if not note:
             logger.warning(f"Note {note_id} not found for indexing")
             return
+
+        user = db.query(User).filter(User.id == note.user_id).first()
+        user_key = user.openai_api_key if user else None
 
         user_id = str(note.user_id)
         file_id = _get_file_id(note_id)
@@ -54,7 +58,7 @@ def index_note_task(note_id: str):
         chunks = knowledge_base_service.chunk_text(text)
         added_count = 0
         for i, chunk in enumerate(chunks):
-            embedding = embedding_service.embed_text(chunk)
+            embedding = embedding_service.embed_text(chunk, api_key=user_key)
             if not embedding:
                 continue
             chunk_id = f"{file_id}_chunk_{i}"

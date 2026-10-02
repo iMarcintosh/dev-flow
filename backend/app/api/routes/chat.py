@@ -144,7 +144,8 @@ async def send_chat_message_stream(
             from app.agent.memory.vector_store import vector_store
             stats = await vector_store.get_project_stats(db, request.project_id)
             relevant_items = await vector_store.similarity_search(
-                db, request.message, request.project_id, top_k=15
+                db, request.message, request.project_id, top_k=15,
+                api_key=current_user.openai_api_key
             )
             context = agent._build_context(stats, relevant_items)
 

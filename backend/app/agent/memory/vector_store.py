@@ -1,5 +1,7 @@
 """Vector store for semantic search using pgvector."""
 
+import asyncio
+import logging
 from typing import List, Optional
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,11 +10,13 @@ from pgvector.sqlalchemy import Vector
 from app.models.item import Item
 from app.services.embedding_service import embedding_service
 
+logger = logging.getLogger(__name__)
+
 
 class VectorStore:
     """Wrapper for pgvector-based semantic search."""
     
-    async def index_item(self, db: AsyncSession, item_id: str):
+    async def index_item(self, db: AsyncSession, item_id: str, api_key: Optional[str] = None):
         """
         Generate and store embedding for an item.
         
@@ -45,8 +49,8 @@ class VectorStore:
         )
         
         # Generate embedding
-        embedding = embedding_service.embed_text(text)
-        
+        embedding = embedding_service.embed_text(text, api_key=api_key)
+
         # Update item
         item.embedding = embedding
         await db.commit()
@@ -56,7 +60,8 @@ class VectorStore:
         db: AsyncSession,
         query: str,
         project_id: str,
-        top_k: int = 10
+        top_k: int = 10,
+        api_key: Optional[str] = None
     ) -> List[Item]:
         """
         Find items most similar to the query using cosine similarity.
@@ -70,9 +75,16 @@ class VectorStore:
         Returns:
             List of most relevant items
         """
-        # Generate query embedding
-        query_embedding = embedding_service.embed_text(query)
-        
+        # Generate query embedding (run sync call in thread to avoid blocking event loop)
+        try:
+            query_embedding = await asyncio.wait_for(
+                asyncio.to_thread(lambda: embedding_service.embed_text(query, api_key=api_key)),
+                timeout=10.0,
+            )
+        except Exception as e:
+            logger.warning(f"Cannot embed query, skipping semantic search: {e}")
+            return []
+
         # pgvector cosine similarity search
         # <=> operator computes cosine distance (lower is better)
         stmt = (

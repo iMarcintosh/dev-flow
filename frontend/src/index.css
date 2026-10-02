@@ -233,6 +233,21 @@ body::-webkit-scrollbar-thumb:hover,
 }
 .animate-cursor { animation: cursor-blink 1s ease-in-out infinite; }
 
+@property --streaming-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes streaming-border-spin {
+  to { --streaming-angle: 360deg; }
+}
+
+.animate-streaming-border {
+  background: conic-gradient(from var(--streaming-angle), #7c3aed, #a855f7, #6366f1, #818cf8, #7c3aed);
+  animation: streaming-border-spin 3s linear infinite;
+}
+
 @keyframes user-message-fly-in {
   from { opacity: 0; transform: translateY(48px) scale(0.95); }
   to   { opacity: 1; transform: translateY(0) scale(1); }

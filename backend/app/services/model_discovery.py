@@ -130,7 +130,24 @@ class ModelDiscoveryService:
     ]
     
     OPENAI_MODELS_FALLBACK = [
-        # GPT-4.1 family (current, 2025)
+        # GPT-5 family (flagship, 2026)
+        ModelInfo(
+            id="gpt-5",
+            name="GPT-5",
+            provider="openai",
+            description="OpenAI flagship model",
+            context_window=1000000,
+            cost_tier="highest"
+        ),
+        ModelInfo(
+            id="gpt-5-mini",
+            name="GPT-5 Mini",
+            provider="openai",
+            description="Smaller, faster GPT-5 variant",
+            context_window=1000000,
+            cost_tier="medium"
+        ),
+        # GPT-4.1 family (1M context, 2025)
         ModelInfo(
             id="gpt-4.1",
             name="GPT-4.1",
@@ -155,7 +172,7 @@ class ModelDiscoveryService:
             context_window=1000000,
             cost_tier="low"
         ),
-        # GPT-4o (still available)
+        # GPT-4o (128k context)
         ModelInfo(
             id="gpt-4o",
             name="GPT-4o",
@@ -172,6 +189,39 @@ class ModelDiscoveryService:
             context_window=128000,
             cost_tier="low"
         ),
+        # Reasoning models
+        ModelInfo(
+            id="o3",
+            name="o3",
+            provider="openai",
+            description="Advanced reasoning model",
+            context_window=200000,
+            cost_tier="highest"
+        ),
+        ModelInfo(
+            id="o3-mini",
+            name="o3 Mini",
+            provider="openai",
+            description="Faster, affordable reasoning model",
+            context_window=200000,
+            cost_tier="medium"
+        ),
+        ModelInfo(
+            id="o1",
+            name="o1",
+            provider="openai",
+            description="OpenAI reasoning model",
+            context_window=200000,
+            cost_tier="high"
+        ),
+        ModelInfo(
+            id="o1-mini",
+            name="o1 Mini",
+            provider="openai",
+            description="Fast, affordable reasoning model",
+            context_window=128000,
+            cost_tier="low"
+        ),
     ]
     
     async def fetch_anthropic_models(self) -> List[ModelInfo]:
@@ -183,58 +233,67 @@ class ModelDiscoveryService:
         """
         return self.ANTHROPIC_MODELS
     
-    async def fetch_openai_models(self) -> List[ModelInfo]:
-        """Fetch OpenAI models from API."""
-        if not settings.openai_api_key:
+    async def fetch_openai_models(self, api_key: str = "") -> List[ModelInfo]:
+        """Fetch OpenAI models from API using the provided key, falling back to global config."""
+        key = api_key or settings.openai_api_key
+        if not key:
             logger.warning("OpenAI API key not configured, using fallback list")
             return self.OPENAI_MODELS_FALLBACK
-        
+
+        # Only current/relevant model prefixes — excludes gpt-4-turbo, gpt-4-0125-preview, etc.
+        ALLOWED_PREFIXES = ("gpt-5", "gpt-4.1", "gpt-4o", "o1", "o3", "o4")
+        EXCLUDED_FRAGMENTS = ("-preview", "-0125", "-0613", "-0314", "-0301", "-instruct")
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {settings.openai_api_key}"}
+                    headers={"Authorization": f"Bearer {key}"}
                 )
                 response.raise_for_status()
                 data = response.json()
-            
-            # Filter to chat models only
+
             models = []
-            chat_model_prefixes = ("gpt-4", "gpt-3.5-turbo", "gpt-5", "o1", "o3")
-            
             for model in data.get("data", []):
                 model_id = model.get("id", "")
-                if model_id.startswith(chat_model_prefixes):
-                    # Map to ModelInfo
-                    name = model_id.replace("-", " ").title()
-                    tier = "high" if "gpt-4" in model_id else "low"
-                    
-                    models.append(ModelInfo(
-                        id=model_id,
-                        name=name,
-                        provider="openai",
-                        description=f"OpenAI {name}",
-                        context_window=0,  # Not provided by API
-                        cost_tier=tier
-                    ))
-            
+                if not any(model_id.startswith(p) for p in ALLOWED_PREFIXES):
+                    continue
+                if any(x in model_id for x in EXCLUDED_FRAGMENTS):
+                    continue
+                name = model_id.replace("-", " ").replace(".", " ").title()
+                if model_id.startswith("gpt-5"):
+                    tier = "highest"
+                elif any(x in model_id for x in ("o3", "o1", "4.1", "4o")):
+                    tier = "high"
+                else:
+                    tier = "medium"
+                models.append(ModelInfo(
+                    id=model_id,
+                    name=name,
+                    provider="openai",
+                    description=f"OpenAI {name}",
+                    context_window=0,
+                    cost_tier=tier
+                ))
+
             return models if models else self.OPENAI_MODELS_FALLBACK
-            
+
         except Exception as e:
             logger.error(f"Failed to fetch OpenAI models: {e}")
             return self.OPENAI_MODELS_FALLBACK
-    
-    async def fetch_openrouter_models(self) -> List[ModelInfo]:
-        """Fetch models from OpenRouter API."""
-        if not settings.openrouter_api_key:
+
+    async def fetch_openrouter_models(self, api_key: str = "") -> List[ModelInfo]:
+        """Fetch models from OpenRouter API using the provided key, falling back to global config."""
+        key = api_key or settings.openrouter_api_key
+        if not key:
             logger.warning("OpenRouter API key not configured")
             return []
-        
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     "https://openrouter.ai/api/v1/models",
-                    headers={"Authorization": f"Bearer {settings.openrouter_api_key}"}
+                    headers={"Authorization": f"Bearer {key}"}
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -278,10 +337,14 @@ class ModelDiscoveryService:
             logger.error(f"Failed to fetch OpenRouter models: {e}")
             return []
     
-    async def get_all_models(self) -> Dict[str, List[Dict[str, Any]]]:
+    async def get_all_models(self, openai_key: str = "", openrouter_key: str = "") -> Dict[str, List[Dict[str, Any]]]:
         """
         Fetch models from all providers.
-        
+
+        Args:
+            openai_key: Per-user OpenAI API key (falls back to global config if empty)
+            openrouter_key: Per-user OpenRouter API key (falls back to global config if empty)
+
         Returns:
             Dictionary grouped by provider:
             {
@@ -291,8 +354,8 @@ class ModelDiscoveryService:
             }
         """
         anthropic_models = await self.fetch_anthropic_models()
-        openai_models = await self.fetch_openai_models()
-        openrouter_models = await self.fetch_openrouter_models()
+        openai_models = await self.fetch_openai_models(api_key=openai_key)
+        openrouter_models = await self.fetch_openrouter_models(api_key=openrouter_key)
         
         return {
             "anthropic": [m.to_dict() for m in anthropic_models],

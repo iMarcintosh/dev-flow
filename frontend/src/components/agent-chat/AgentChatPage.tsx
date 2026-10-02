@@ -98,6 +98,7 @@ export default function AgentChatPage() {
     setStreamingContent('')
     setActiveTools([])
     setChatError(false)
+    let accumulatedContent = ''
 
     // Optimistically add the user message to the cache so it shows immediately
     const optimisticMessage: AgentMessage = {
@@ -144,7 +145,8 @@ export default function AgentChatPage() {
             const event = JSON.parse(line.slice(6))
 
             if (event.type === 'stream') {
-              setStreamingContent((prev) => prev + event.content)
+              accumulatedContent += event.content
+              setStreamingContent(accumulatedContent)
             } else if (event.type === 'tool_call') {
               setActiveTools((prev) => [...prev, { name: event.name, done: false }])
             } else if (event.type === 'tool_result') {
@@ -156,11 +158,26 @@ export default function AgentChatPage() {
                 )
               )
             } else if (event.type === 'end') {
+              // Optimistically write assistant message into cache to avoid flicker
+              const assistantMessage: AgentMessage = {
+                id: crypto.randomUUID(),
+                conversation_id: selectedConversationId,
+                role: 'assistant',
+                content: accumulatedContent,
+                message_metadata: {},
+                created_at: new Date().toISOString(),
+              }
+              queryClient.setQueryData(
+                ['conversation-messages', selectedConversationId],
+                (old: AgentMessage[] = []) => [...old, assistantMessage]
+              )
               setIsStreaming(false)
               setStreamingContent('')
               setActiveTools([])
+              // Mark stale without immediate refetch — server sync happens on next focus/mount
               queryClient.invalidateQueries({
                 queryKey: ['conversation-messages', selectedConversationId],
+                refetchType: 'none',
               })
               queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
             } else if (event.type === 'error') {

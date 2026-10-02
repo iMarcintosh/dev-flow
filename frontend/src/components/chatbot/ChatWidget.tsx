@@ -34,7 +34,7 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
 
   useEffect(() => {
     scrollToBottom()
-  }, [history, streamingContent])
+  }, [history, streamingContent, optimisticUserMessage, isStreaming])
 
   const handleSend = async () => {
     if (!message.trim() || isStreaming) return
@@ -63,6 +63,7 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let hadError = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -78,10 +79,13 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
               setStreamingContent((prev) => prev + event.content)
             } else if (event.type === 'end') {
               setIsStreaming(false)
-              setStreamingContent('')
+              if (!hadError) {
+                setStreamingContent('')
+              }
               setOptimisticUserMessage(null)
               queryClient.invalidateQueries({ queryKey: ['chat', projectId] })
             } else if (event.type === 'error') {
+              hadError = true
               setStreamingContent(event.content || 'An error occurred.')
               setIsStreaming(false)
               setOptimisticUserMessage(null)
@@ -120,7 +124,7 @@ export default function ChatWidget({ projectId }: ChatWidgetProps) {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-gray-900 border border-gray-800 rounded-lg shadow-2xl flex flex-col z-50 animate-in slide-in-from-bottom-4 duration-200">
+    <div className="fixed bottom-6 right-6 w-96 h-[600px] max-h-[calc(100dvh-3rem)] bg-gray-900 border border-gray-800 rounded-lg shadow-2xl flex flex-col z-50 animate-in slide-in-from-bottom-4 duration-200">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <div className="flex items-center gap-2">

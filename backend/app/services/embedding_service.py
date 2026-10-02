@@ -1,7 +1,6 @@
 """Embedding service for converting text to vectors."""
 
-import os
-from typing import List
+from typing import List, Optional
 
 from openai import OpenAI
 
@@ -10,17 +9,26 @@ class EmbeddingService:
     """Service for generating embeddings using OpenAI."""
 
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=api_key)
         self.model = "text-embedding-3-small"
         self.dimensions = 1536
+        self._clients: dict = {}  # cache OpenAI client per key
 
-    def embed_text(self, text: str) -> List[float]:
+    def _get_client(self, api_key: Optional[str] = None) -> OpenAI:
+        from app.config import settings
+        key = api_key or settings.openai_api_key
+        if not key:
+            raise ValueError("No OpenAI API key available for embeddings")
+        if key not in self._clients:
+            self._clients[key] = OpenAI(api_key=key)
+        return self._clients[key]
+
+    def embed_text(self, text: str, api_key: Optional[str] = None) -> List[float]:
         """Generate embedding for a single text."""
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
 
-        response = self.client.embeddings.create(
+        client = self._get_client(api_key)
+        response = client.embeddings.create(
             model=self.model,
             input=text,
             encoding_format="float"
@@ -28,7 +36,7 @@ class EmbeddingService:
 
         return response.data[0].embedding
 
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def embed_batch(self, texts: List[str], api_key: Optional[str] = None) -> List[List[float]]:
         """Generate embeddings for multiple texts."""
         if not texts:
             return []
@@ -37,7 +45,8 @@ class EmbeddingService:
         if not valid_texts:
             return []
 
-        response = self.client.embeddings.create(
+        client = self._get_client(api_key)
+        response = client.embeddings.create(
             model=self.model,
             input=valid_texts,
             encoding_format="float"
