@@ -5,6 +5,7 @@ export interface User {
   is_verified: boolean
   is_active: boolean
   avatar_url?: string
+  preferred_models?: Record<string, string> | null
   created_at: string
 }
 

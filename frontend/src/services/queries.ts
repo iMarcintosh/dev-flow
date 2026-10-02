@@ -305,7 +305,7 @@ export const useDeleteApiKey = () => {
 // ==================== TEAMS ====================
 
 import * as teamsApi from './teams'
-import type { Team, TeamDetail, CreateTeamRequest, AddMemberRequest, UpdateRoleRequest } from './teams'
+import type { CreateTeamRequest, AddMemberRequest } from './teams'
 
 export const useTeams = () => {
   return useQuery({

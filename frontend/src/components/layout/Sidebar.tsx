@@ -129,8 +129,7 @@ export function Sidebar() {
                 <button
                   key={project.id}
                   onClick={() => {
-                    const currentPath = routerState.location.pathname
-                    navigate({ to: currentPath as any, search: { project_id: project.id } })
+                    navigate({ to: '.', search: (previous) => ({ ...previous, project_id: project.id }) })
                     setIsProjectDropdownOpen(false)
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"

@@ -10,7 +10,7 @@ import {
   DragStartEvent,
   DragEndEvent,
 } from '@dnd-kit/core'
-import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { arrayMove } from '@dnd-kit/sortable'
 import { Item, ItemStatus } from '@/types'
 import KanbanColumn from './KanbanColumn'
 import ItemCard from '@/components/cards/ItemCard'
@@ -23,10 +23,10 @@ interface KanbanBoardProps {
 }
 
 const COLUMNS: { id: ItemStatus; title: string }[] = [
-  { id: 'backlog', title: 'Backlog' },
-  { id: 'in_progress', title: 'In Progress' },
-  { id: 'review', title: 'Review' },
-  { id: 'done', title: 'Done' },
+  { id: ItemStatus.BACKLOG, title: 'Backlog' },
+  { id: ItemStatus.IN_PROGRESS, title: 'In Progress' },
+  { id: ItemStatus.REVIEW, title: 'Review' },
+  { id: ItemStatus.DONE, title: 'Done' },
 ]
 
 export default function KanbanBoard({ projectId, items, onItemClick }: KanbanBoardProps) {
@@ -113,14 +113,11 @@ export default function KanbanBoard({ projectId, items, onItemClick }: KanbanBoa
 
   const handleCreateItem = (status: ItemStatus) => {
     const statusName = COLUMNS.find(col => col.id === status)?.title || status
-    const targetItems = itemsByStatus[status]
-    const newPosition = targetItems.length > 0 ? targetItems[targetItems.length - 1].position + 1 : 1
     
     createItem.mutate({
       project_id: projectId,
       title: `New ${statusName} Item`,
       status,
-      position: newPosition,
     })
   }
 
