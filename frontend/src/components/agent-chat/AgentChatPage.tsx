@@ -18,9 +18,9 @@ export default function AgentChatPage() {
   const search = useSearch({ from: '/chat' })
   const queryClient = useQueryClient()
 
-  const agentId = (search as any).agent_id as string | undefined
-  const conversationIdFromUrl = (search as any).conversation_id as string | undefined
-  const projectIdFromUrl = (search as any).project_id as string | undefined
+  const agentId = search.agent_id
+  const conversationIdFromUrl = search.conversation_id
+  const projectIdFromUrl = search.project_id
 
   const { data: projects } = useProjects()
   const defaultProjectId = projectIdFromUrl ?? projects?.[0]?.id
@@ -33,6 +33,34 @@ export default function AgentChatPage() {
   const [streamingContent, setStreamingContent] = useState('')
   const [activeTools, setActiveTools] = useState<Array<{ name: string; done: boolean; duration_ms?: number }>>([])
   const abortRef = useRef<AbortController | null>(null)
+
+  // A stream belongs to one conversation. Cancel and clear it when the
+  // selection changes (including browser navigation), or on unmount.
+  useEffect(() => {
+    setIsStreaming(false)
+    setStreamingContent('')
+    setActiveTools([])
+    setChatError(false)
+    return () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+  }, [selectedConversationId, agentId])
+
+  useEffect(() => {
+    setSelectedConversationId(conversationIdFromUrl)
+  }, [conversationIdFromUrl, agentId])
+
+  const selectConversation = (conversationId: string | undefined) => {
+    if (conversationId === selectedConversationId) return
+    abortRef.current?.abort()
+    abortRef.current = null
+    setSelectedConversationId(conversationId)
+    navigate({
+      to: '/chat',
+      search: { agent_id: agentId, conversation_id: conversationId, project_id: projectIdFromUrl },
+    })
+  }
 
   const { data: agent, isLoading: agentLoading } = useQuery({
     queryKey: ['custom-agent', agentId],
@@ -56,7 +84,7 @@ export default function AgentChatPage() {
     mutationFn: () => conversationService.createConversation(agentId!, defaultProjectId),
     onSuccess: (newConversation) => {
       queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
-      setSelectedConversationId(newConversation.id)
+      selectConversation(newConversation.id)
     },
   })
 
@@ -67,12 +95,13 @@ export default function AgentChatPage() {
   }
 
   const handleSelectConversation = (conversationId: string) => {
-    setSelectedConversationId(conversationId)
+    selectConversation(conversationId)
     setChatError(false)
   }
 
   const handleStop = () => {
     abortRef.current?.abort()
+    abortRef.current = null
     setIsStreaming(false)
     setStreamingContent('')
     setActiveTools([])
@@ -81,7 +110,7 @@ export default function AgentChatPage() {
   const handleDeleteConversation = (conversationId: string) => {
     if (conversationId === selectedConversationId) {
       const otherConversations = conversations.filter((c) => c.id !== conversationId)
-      setSelectedConversationId(otherConversations[0]?.id)
+      selectConversation(otherConversations[0]?.id)
     }
     queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
   }
@@ -123,6 +152,11 @@ export default function AgentChatPage() {
         signal: controller.signal,
       })
 
+      if (abortRef.current !== controller) {
+        await response.body?.cancel()
+        return
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
       }
@@ -133,7 +167,9 @@ export default function AgentChatPage() {
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        // An older, cancelled request must not alter a newer stream's state.
+        if (abortRef.current !== controller) return
+        if (done) throw new Error('Stream ended before a completion event')
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
@@ -141,60 +177,71 @@ export default function AgentChatPage() {
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
+          let event
           try {
-            const event = JSON.parse(line.slice(6))
-
-            if (event.type === 'stream') {
-              accumulatedContent += event.content
-              setStreamingContent(accumulatedContent)
-            } else if (event.type === 'tool_call') {
-              setActiveTools((prev) => [...prev, { name: event.name, done: false }])
-            } else if (event.type === 'tool_result') {
-              setActiveTools((prev) =>
-                prev.map((t) =>
-                  t.name === event.name && !t.done
-                    ? { ...t, done: true, duration_ms: event.duration_ms }
-                    : t
-                )
-              )
-            } else if (event.type === 'end') {
-              // Optimistically write assistant message into cache to avoid flicker
-              const assistantMessage: AgentMessage = {
-                id: crypto.randomUUID(),
-                conversation_id: selectedConversationId,
-                role: 'assistant',
-                content: accumulatedContent,
-                message_metadata: {},
-                created_at: new Date().toISOString(),
-              }
-              queryClient.setQueryData(
-                ['conversation-messages', selectedConversationId],
-                (old: AgentMessage[] = []) => [...old, assistantMessage]
-              )
-              setIsStreaming(false)
-              setStreamingContent('')
-              setActiveTools([])
-              // Mark stale without immediate refetch — server sync happens on next focus/mount
-              queryClient.invalidateQueries({
-                queryKey: ['conversation-messages', selectedConversationId],
-                refetchType: 'none',
-              })
-              queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
-            } else if (event.type === 'error') {
-              setIsStreaming(false)
-              setChatError(true)
-            }
+            event = JSON.parse(line.slice(6))
           } catch {
             // malformed JSON chunk — skip
+            continue
+          }
+
+          if (event.type === 'stream') {
+            accumulatedContent += event.content
+            setStreamingContent(accumulatedContent)
+          } else if (event.type === 'tool_call') {
+            setActiveTools((prev) => [...prev, { name: event.name, done: false }])
+          } else if (event.type === 'tool_result') {
+            setActiveTools((prev) =>
+              prev.map((t) =>
+                t.name === event.name && !t.done
+                  ? { ...t, done: true, duration_ms: event.duration_ms }
+                  : t
+              )
+            )
+          } else if (event.type === 'end') {
+            // Optimistically write assistant message into cache to avoid flicker
+            const assistantMessage: AgentMessage = {
+              id: crypto.randomUUID(),
+              conversation_id: selectedConversationId,
+              role: 'assistant',
+              content: accumulatedContent,
+              message_metadata: { model: event.model, tools_used: event.tools_used },
+              created_at: new Date().toISOString(),
+            }
+            queryClient.setQueryData(
+              ['conversation-messages', selectedConversationId],
+              (old: AgentMessage[] = []) => [...old, assistantMessage]
+            )
+            setIsStreaming(false)
+            setStreamingContent('')
+            setActiveTools([])
+            // Mark stale without immediate refetch — server sync happens on next focus/mount
+            queryClient.invalidateQueries({
+              queryKey: ['conversation-messages', selectedConversationId],
+              refetchType: 'none',
+            })
+            queryClient.invalidateQueries({ queryKey: ['agent-conversations', agentId] })
+            await reader.cancel()
+            return
+          } else if (event.type === 'error') {
+            throw new Error(event.error || 'Agent response failed')
           }
         }
       }
     } catch (err: any) {
+      if (abortRef.current !== controller) return
       if (err.name !== 'AbortError') {
         console.error('Streaming error:', err)
         setChatError(true)
       }
-      setIsStreaming(false)
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null
+        controller.abort()
+        setIsStreaming(false)
+        setStreamingContent('')
+        setActiveTools([])
+      }
     }
   }
 

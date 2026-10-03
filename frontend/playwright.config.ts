@@ -3,6 +3,9 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/browser',
   fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  workers: process.env.CI ? 2 : undefined,
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:5173',
     browserName: 'chromium',
@@ -10,6 +13,7 @@ export default defineConfig({
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
     },
     screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command: 'npm run dev -- --host localhost',

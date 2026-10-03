@@ -44,6 +44,7 @@ export function ChatInput({ onError, isStreaming, onSendMessage, onStop }: ChatI
         />
         {isStreaming ? (
           <button
+            aria-label="Stop response"
             onClick={onStop}
             className="self-end px-4 py-3 bg-red-500/15 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/25 transition-all duration-150 active:scale-95"
           >
@@ -51,6 +52,7 @@ export function ChatInput({ onError, isStreaming, onSendMessage, onStop }: ChatI
           </button>
         ) : (
           <button
+            aria-label="Send message"
             onClick={handleSend}
             disabled={!message.trim()}
             className="self-end px-4 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
