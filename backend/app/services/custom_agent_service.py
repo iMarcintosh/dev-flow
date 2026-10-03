@@ -118,7 +118,7 @@ async def delete_agent(
     user_id: UUID
 ) -> None:
     """
-    Delete an agent (soft delete by setting visibility).
+    Delete an agent and its associated records.
     
     Args:
         db: Database session
