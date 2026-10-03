@@ -70,6 +70,8 @@ app.include_router(notes.router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("DevFlow backend starting up...")
+    from app.agent.custom_agent_runner import setup_chat_checkpointer
+    await setup_chat_checkpointer()
     # Re-indexing is handled by Celery worker startup (celery_app.py setup_agents)
 
 

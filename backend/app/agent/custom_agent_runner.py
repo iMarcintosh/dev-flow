@@ -36,6 +36,14 @@ def _get_postgres_conn_string() -> str:
     return url.replace("postgresql+asyncpg://", "postgresql://")
 
 
+async def setup_chat_checkpointer() -> None:
+    """Run checkpoint migrations before request transactions can block their indexes."""
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
+        await checkpointer.setup()
+
+
 async def run_custom_agent(
     db: AsyncSession,
     agent_id: UUID,
@@ -405,8 +413,6 @@ async def run_custom_agent_sse(
         # The async with block must wrap the entire stream so the checkpointer
         # connection stays open during all astream iterations.
         async with AsyncPostgresSaver.from_conn_string(_get_postgres_conn_string()) as checkpointer:
-            await checkpointer.setup()  # idempotent: CREATE TABLE IF NOT EXISTS
-
             # Pass system_prompt via prompt= so it's injected by the framework
             # and NOT stored in the Postgres thread history (avoids accumulation
             # of duplicate SystemMessages across turns).
