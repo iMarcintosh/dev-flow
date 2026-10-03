@@ -3,7 +3,7 @@ Analytics Models for tracking usage metrics.
 """
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 from datetime import datetime, timezone
 import uuid
 from app.database import Base
@@ -46,7 +46,11 @@ class AgentAnalytics(Base):
     updated_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
-    agent = relationship("CustomAgent", backref="analytics")
+    # Delete loaded analytics through the ORM; PostgreSQL's ON DELETE CASCADE
+    # handles unloaded rows without setting their required agent_id to NULL.
+    agent = relationship("CustomAgent", backref=backref(
+        "analytics", cascade="all, delete-orphan", passive_deletes=True
+    ))
     user = relationship("User", backref="agent_analytics")
 
 
